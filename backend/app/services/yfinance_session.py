@@ -6,34 +6,38 @@ same code worked fine from the developer's home IP during local testing
 (see CLAUDE.md entry on the public-deployment yfinance 429s for how this
 was diagnosed from Render's logs).
 
-Two independent mitigations, both applied here rather than duplicated in
-every file that calls yfinance (app/services/fundamentals.py and
-app/services/portfolio_performance.py):
+**`curl_cffi` impersonation session — tried, then reverted.** The original
+version of this module passed every `yf.Ticker(...)` call a shared
+`curl_cffi.requests.Session(impersonate="chrome")`, on the theory (yfinance's
+own documented workaround for Yahoo's anti-bot rate limiting) that a real
+Chrome TLS fingerprint would get blocked less than plain `requests`'s. In
+production on Render this actually made things *worse*: every single
+ticker started failing with `'str' object has no attribute 'name'` (visible
+in Render's logs as "$TICKER: possibly delisted; no timezone found", which
+is just yfinance's generic wrapper message for "the underlying call raised
+some exception") — a real incompatibility between this yfinance version's
+internal response parsing and the object curl_cffi's `Session` returns, not
+a Yahoo-side rejection. **This module no longer uses curl_cffi at all** —
+`get_ticker()` now always returns a plain `yf.Ticker(ticker)` with
+yfinance's own default session, exactly as before either change. The
+dependency stays listed in requirements.txt (harmless, unused) in case a
+future yfinance release documents a working way to combine the two.
 
-1. **`curl_cffi` impersonation session.** Plain `requests` (yfinance's
-   default HTTP client) has a distinctive TLS/HTTP fingerprint that
-   Yahoo's anti-bot layer appears to flag more aggressively than a real
-   browser's — this is yfinance's own documented workaround (see the
-   project's README/FAQ on rate limiting) for exactly this symptom.
-   `curl_cffi.requests.Session(impersonate="chrome")` presents a real
-   Chrome TLS fingerprint instead. Every `yf.Ticker(...)` call in this
-   codebase should go through `get_ticker()` below instead of calling
-   `yf.Ticker(...)` directly, so they all benefit from this.
-2. **Retry with exponential backoff on 429 specifically.** Even with the
-   impersonation session, a burst of calls (one portfolio holding N
-   tickers + up to 5 benchmark ETFs, all fetched back-to-back on a cold
-   Render instance with an empty in-memory cache) can still trip a
-   short-lived rate limit. `call_with_retry()` retries a yfinance call up
-   to 3 times (1s, 3s, 7s backoff) specifically when the failure looks
-   like a 429/"Too Many Requests", and re-raises immediately for any other
-   kind of failure (a real "ticker not found" shouldn't be retried).
+The one mitigation that remains here: **retry with exponential backoff on
+429 specifically.** A burst of calls (one portfolio holding N tickers + up
+to 5 benchmark ETFs, all fetched back-to-back on a cold Render instance
+with an empty in-memory cache) can trip a short-lived rate limit even
+without a fingerprinting issue. `call_with_retry()` retries a yfinance call
+up to 3 times (1s, 3s, 9s backoff) specifically when the failure looks like
+a 429/"Too Many Requests", and re-raises immediately for any other kind of
+failure (a real "ticker not found" shouldn't be retried).
 
-Neither mitigation is a guarantee — Yahoo's public endpoints are an
+This is a mitigation, not a guarantee — Yahoo's public endpoints are an
 undocumented, unofficial surface (see fundamentals.py's module docstring)
-and can still throttle a busy public deployment. If 429s persist even
-with both of these, the real fix is switching the affected endpoint to a
-paid/official data provider (e.g. Finnhub, which this app already uses
-for live quotes — see app/services/market_data.py) instead of yfinance.
+and can still throttle a busy public deployment. If 429s persist even with
+this, the real fix is switching the affected endpoint to a paid/official
+data provider (e.g. Finnhub, which this app already uses for live quotes —
+see app/services/market_data.py) instead of yfinance.
 """
 
 from __future__ import annotations
@@ -43,27 +47,15 @@ from typing import Callable, TypeVar
 
 import yfinance as yf
 
-try:
-    from curl_cffi import requests as curl_cffi_requests
-
-    _SHARED_SESSION = curl_cffi_requests.Session(impersonate="chrome")
-except Exception:
-    # curl_cffi not installed, or its bundled impersonation build doesn't
-    # support this platform — fall back to yfinance's own default session
-    # rather than crashing the whole app. Rate-limiting is then more
-    # likely, but everything still works exactly as it did before this
-    # module existed.
-    _SHARED_SESSION = None
-
 T = TypeVar("T")
 
 
 def get_ticker(ticker: str) -> yf.Ticker:
-    """Use everywhere instead of `yf.Ticker(ticker)` directly, so every
-    caller shares the same browser-impersonating session (see module
-    docstring)."""
-    if _SHARED_SESSION is not None:
-        return yf.Ticker(ticker, session=_SHARED_SESSION)
+    """Use everywhere instead of `yf.Ticker(ticker)` directly. Currently
+    just a thin pass-through (see module docstring for why the earlier
+    curl_cffi-backed version of this function was reverted) — kept as the
+    single call site so a future change here doesn't require touching
+    fundamentals.py/portfolio_performance.py again."""
     return yf.Ticker(ticker)
 
 
