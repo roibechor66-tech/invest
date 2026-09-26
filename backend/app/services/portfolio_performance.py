@@ -32,15 +32,19 @@ from __future__ import annotations
 import time
 from datetime import date, timedelta
 
-import yfinance as yf
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.portfolio import Portfolio
 from app.models.schemas import PortfolioPerformancePeriod, PortfolioPerformanceResponse
 from app.services import market_data
+from app.services.yfinance_session import call_with_retry, get_ticker
 
-_HISTORY_CACHE_TTL_SECONDS = 3600  # daily closes don't need to be fresher than hourly
+# Bumped from 1 hour to 4 hours after discovering (in production, on
+# Render) that Yahoo Finance rate-limits/blocks requests from cloud
+# datacenter IPs — see yfinance_session.py's module docstring. Daily
+# closes don't need to be fresher than that anyway.
+_HISTORY_CACHE_TTL_SECONDS = 3600 * 4
 _history_cache: dict[str, tuple[float, list[tuple[date, float]]]] = {}
 
 # id, Hebrew label, lookback in calendar days (ytd is computed specially below)
@@ -88,7 +92,9 @@ def _fetch_history(ticker: str, *, use_cache: bool = True) -> list[tuple[date, f
     today = date.today()
     from_date = today - timedelta(days=400)
     try:
-        history = yf.Ticker(ticker).history(start=from_date.isoformat(), end=today.isoformat())
+        history = call_with_retry(
+            lambda: get_ticker(ticker).history(start=from_date.isoformat(), end=today.isoformat())
+        )
     except Exception as exc:  # yfinance raises assorted exceptions on network/parse failure
         _last_fetch_error[ticker] = f"{ticker}: קריאת הרשת ל-Yahoo Finance נכשלה ({exc})"
         _history_cache[ticker] = (time.time(), [])

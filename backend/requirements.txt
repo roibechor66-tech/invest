@@ -38,6 +38,14 @@ anthropic==0.40.0
 # — free, no API key needed, pulls from Yahoo Finance. Pulls in pandas as
 # a dependency automatically.
 yfinance==0.2.44
+# Gives yfinance calls a real Chrome TLS fingerprint instead of plain
+# `requests`'s — Yahoo Finance's anti-bot layer appears to flag the plain
+# fingerprint more readily, especially from cloud/datacenter IPs like
+# Render's (see app/services/yfinance_session.py for the full story and
+# the 429 errors that led here). If this package fails to install on some
+# platform, the app still runs fine without it — yfinance_session.py falls
+# back to yfinance's own default session automatically.
+curl_cffi==0.7.4
 # DEPRECATED / no longer used: every AI-bot call site above briefly ran on
 # the free Gemini API instead of Claude (see the now-unused
 # app/services/gemini_client.py) — reverted because Gemini's free tier had

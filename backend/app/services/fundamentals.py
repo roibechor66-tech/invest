@@ -54,10 +54,18 @@ from typing import Any
 
 import yfinance as yf
 
-_MULTIPLES_CACHE_TTL_SECONDS = 300  # fundamentals move slowly; 5 min is plenty
-_STATEMENTS_CACHE_TTL_SECONDS = 300
-_ESTIMATES_CACHE_TTL_SECONDS = 3600  # analyst estimates update rarely
-_SEGMENTS_CACHE_TTL_SECONDS = 3600
+from app.services.yfinance_session import call_with_retry, get_ticker
+
+# Bumped up from the original 5-min/1-hour values after discovering (in
+# production, on Render) that Yahoo Finance rate-limits/blocks requests
+# from cloud datacenter IPs — see yfinance_session.py's module docstring.
+# Longer TTLs mean fewer round-trips to Yahoo per hour across all users of
+# this (shared, per-process) cache, which is the single biggest lever
+# against tripping that rate limit short of switching data providers.
+_MULTIPLES_CACHE_TTL_SECONDS = 1800  # 30 min (was 5 min)
+_STATEMENTS_CACHE_TTL_SECONDS = 1800  # 30 min (was 5 min)
+_ESTIMATES_CACHE_TTL_SECONDS = 3600 * 6  # 6 hours (was 1 hour)
+_SEGMENTS_CACHE_TTL_SECONDS = 3600 * 6  # 6 hours (was 1 hour)
 
 # Per-process in-memory caches, same caveat as market_data.py: not
 # persisted or shared across workers, fine for a single-process dev/demo
@@ -193,7 +201,7 @@ def get_multiples(ticker: str, *, use_cache: bool = True) -> CompanyMultiples:
             return cached[1]
 
     try:
-        info = yf.Ticker(ticker).info or {}
+        info = call_with_retry(lambda: get_ticker(ticker).info) or {}
     except Exception as exc:  # yfinance raises assorted exceptions on network/parse failure
         raise ValueError(f'קריאה ל-Yahoo Finance נכשלה עבור "{ticker}": {exc}') from exc
 
@@ -241,10 +249,15 @@ def get_financial_statements(
 
     is_quarterly = period == "quarter"
     try:
-        t = yf.Ticker(ticker)
-        income_df = t.quarterly_financials if is_quarterly else t.financials
-        balance_df = t.quarterly_balance_sheet if is_quarterly else t.balance_sheet
-        cashflow_df = t.quarterly_cashflow if is_quarterly else t.cashflow
+        def _fetch_statements():
+            t = get_ticker(ticker)
+            return (
+                (t.quarterly_financials if is_quarterly else t.financials),
+                (t.quarterly_balance_sheet if is_quarterly else t.balance_sheet),
+                (t.quarterly_cashflow if is_quarterly else t.cashflow),
+            )
+
+        income_df, balance_df, cashflow_df = call_with_retry(_fetch_statements)
     except Exception as exc:
         raise ValueError(f'קריאה ל-Yahoo Finance (דוחות כספיים) נכשלה עבור "{ticker}": {exc}') from exc
 
@@ -348,9 +361,11 @@ def get_analyst_estimates(ticker: str, *, limit: int = 3, use_cache: bool = True
             return cached[1]
 
     try:
-        t = yf.Ticker(ticker)
-        revenue_df = t.revenue_estimate
-        eps_df = t.earnings_estimate
+        def _fetch_estimates():
+            t = get_ticker(ticker)
+            return t.revenue_estimate, t.earnings_estimate
+
+        revenue_df, eps_df = call_with_retry(_fetch_estimates)
     except Exception:
         # Best-effort data source — treat any failure here as "not
         # available" rather than raising, since estimates are a nice-to-
