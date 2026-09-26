@@ -37,7 +37,28 @@ anthropic==0.40.0
 # historical prices (app/services/fundamentals.py, portfolio_performance.py)
 # — free, no API key needed, pulls from Yahoo Finance. Pulls in pandas as
 # a dependency automatically.
-yfinance==0.2.44
+#
+# Un-pinned from the original ==0.2.44 after discovering (in production, on
+# Render) that EVERY ticker failed identically with "Failed to get ticker
+# '<X>' reason: 'str' object has no attribute 'name'" (logged as "possibly
+# delisted; no timezone found") — this happened even for well-covered,
+# definitely-not-delisted tickers, and even after removing the curl_cffi
+# session that was first suspected (see app/services/yfinance_session.py).
+# A failure that uniform, on the very first internal call yfinance makes
+# per ticker (fetching exchange/timezone metadata), is the signature of
+# Yahoo's endpoint returning something yfinance 0.2.44 doesn't know how to
+# parse any more (an HTML/error page instead of JSON, or a stricter
+# crumb+cookie handshake Yahoo added after this yfinance version was
+# released) — not a per-ticker or rate-limit issue. yfinance ships frequent
+# hotfixes for exactly this kind of Yahoo-side API change, so this is
+# loosened to a minimum version instead of an exact pin, letting `pip
+# install` on each deploy pick up whatever the latest compatible release
+# is. **Not yet verified against a live deploy** (this environment has no
+# outbound network to PyPI to confirm an exact newer version number) — if
+# the same error persists even after this, the real fix is switching this
+# data source to Finnhub (already used for live quotes, see
+# app/services/market_data.py) instead of continuing to patch yfinance.
+yfinance>=0.2.50
 # DEPRECATED / no longer used: every AI-bot call site above briefly ran on
 # the free Gemini API instead of Claude (see the now-unused
 # app/services/gemini_client.py) — reverted because Gemini's free tier had
