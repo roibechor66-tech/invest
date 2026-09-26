@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   IndexCategoryId,
@@ -9,6 +9,8 @@ import {
   IndexQuote,
 } from "@/lib/types";
 import { SectorHeatmapModal } from "@/components/dashboard/tools/SectorHeatmapModal";
+import { LIVE_INDEX_SYMBOLS } from "@/lib/live-index-symbols";
+import { LiveIndexQuote, useLiveIndicesQuotes } from "@/lib/hooks/useLiveIndicesQuotes";
 
 interface WatchedIndicesCardProps {
   indices: IndexQuote[];
@@ -31,6 +33,12 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
   const [periodId, setPeriodId] = useState(periods[0].id);
   const [categoryId, setCategoryId] = useState<IndexCategoryId>(categories[0].id);
   const [openSector, setOpenSector] = useState<IndexQuote | null>(null);
+
+  // Every distinct ticker symbol this screen can show live (see
+  // lib/live-index-symbols.ts for which ids qualify and why not all of
+  // them do) — fetched once as a batch and looked up per-row below.
+  const liveSymbols = useMemo(() => Array.from(new Set(Object.values(LIVE_INDEX_SYMBOLS))), []);
+  const liveQuotesBySymbol = useLiveIndicesQuotes(liveSymbols);
 
   const ilIndices = indices.filter((i) => i.region === "il");
   const globalIndices = indices.filter((i) => i.region === "global");
@@ -93,7 +101,12 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
             </p>
             <div className="space-y-2">
               {ilIndices.map((index) => (
-                <IndexRow key={index.id} index={index} periodId={periodId} />
+                <IndexRow
+                  key={index.id}
+                  index={index}
+                  periodId={periodId}
+                  liveQuote={liveQuoteFor(index.id, liveQuotesBySymbol)}
+                />
               ))}
             </div>
           </div>
@@ -103,7 +116,12 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
             </p>
             <div className="space-y-2">
               {globalIndices.map((index) => (
-                <IndexRow key={index.id} index={index} periodId={periodId} />
+                <IndexRow
+                  key={index.id}
+                  index={index}
+                  periodId={periodId}
+                  liveQuote={liveQuoteFor(index.id, liveQuotesBySymbol)}
+                />
               ))}
             </div>
           </div>
@@ -115,6 +133,7 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
               key={index.id}
               index={index}
               periodId={periodId}
+              liveQuote={liveQuoteFor(index.id, liveQuotesBySymbol)}
               onClick={categoryId === "sectors" ? () => setOpenSector(index) : undefined}
             />
           ))}
@@ -128,7 +147,8 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
       )}
       {categoryId !== "main" && categoryId !== "sectors" && (
         <p className="mt-3 text-[11px] text-slate-500">
-          נתוני תעודות הסל/המדדים לעיל הם דמה להדגמת המסך. בשלב 3 יחוברו למקור שערים חי.
+          שורות עם תג &quot;חי&quot; מציגות רמה נוכחית ותשואה יומית חיה (Finnhub); שאר הנתונים
+          (תשואות תקופות אחרות, מכפילים) הם דמה להדגמת המסך.
         </p>
       )}
 
@@ -143,16 +163,36 @@ export function WatchedIndicesCard({ indices, periods, categories }: WatchedIndi
   );
 }
 
+// Resolves an index/ETF row's live quote (if this id maps to a
+// Finnhub-quotable symbol AND that symbol's batch fetch actually
+// succeeded this round) — undefined otherwise, in which case the row
+// just shows its mock valuePts/returns as before.
+function liveQuoteFor(
+  indexId: string,
+  liveQuotesBySymbol: Record<string, LiveIndexQuote>
+): LiveIndexQuote | undefined {
+  const symbol = LIVE_INDEX_SYMBOLS[indexId];
+  if (!symbol) return undefined;
+  return liveQuotesBySymbol[symbol];
+}
+
 function IndexRow({
   index,
   periodId,
+  liveQuote,
   onClick,
 }: {
   index: IndexQuote;
   periodId: IndexPeriodOption["id"];
+  liveQuote?: LiveIndexQuote;
   onClick?: () => void;
 }) {
-  const returnPct = index.returns[periodId];
+  // Live data only replaces the current level and, when the "יומי" period
+  // is selected, the daily return — the other periods' returns (weekly/
+  // quarterly/YTD/yearly/5y) have no live source here and stay mock, same
+  // as the P/E ratios below.
+  const displayValue = liveQuote ? liveQuote.price : index.valuePts;
+  const returnPct = liveQuote && periodId === "daily" ? liveQuote.dayChangePct : index.returns[periodId];
   const isUp = returnPct >= 0;
   // P/E and forward P/E are omitted for regions with no earnings-based
   // multiple at all (bonds, commodities) and for the VIX — see IndexQuote.
@@ -160,9 +200,16 @@ function IndexRow({
   const content = (
     <>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-800">{index.labelHe}</span>
+        <span className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+          {index.labelHe}
+          {liveQuote && (
+            <span className="rounded-full bg-positive/15 px-1.5 py-0.5 text-[10px] font-semibold text-positive">
+              חי
+            </span>
+          )}
+        </span>
         <div className="text-left">
-          <span className="text-sm text-slate-500">{index.valuePts.toLocaleString("he-IL")}</span>
+          <span className="text-sm text-slate-500">{displayValue.toLocaleString("he-IL")}</span>
           <span
             className={clsx(
               "ms-2 text-sm font-semibold",

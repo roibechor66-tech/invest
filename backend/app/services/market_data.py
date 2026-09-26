@@ -124,6 +124,25 @@ def get_quote(ticker: str, *, use_cache: bool = True) -> Quote:
     return quote
 
 
+def get_quotes_batch(tickers: list[str]) -> dict[str, Quote]:
+    """Looks up several tickers, one Finnhub call each (each individually
+    cached/short-TTL as in `get_quote`). Used by the watched-indices card
+    (app/routers/market_data.py's /quotes endpoint) to refresh many
+    ETF/index proxies in one request from the frontend instead of one
+    round-trip per row. A ticker that fails (unrecognized symbol, upstream
+    error) is simply **omitted** from the result rather than failing the
+    whole batch — same "some rows stay mock, don't blank out the screen"
+    convention used throughout this app (e.g. portfolio_performance.py's
+    unavailable benchmarks)."""
+    results: dict[str, Quote] = {}
+    for ticker in tickers:
+        try:
+            results[ticker.strip().upper()] = get_quote(ticker)
+        except ValueError:
+            continue
+    return results
+
+
 def get_usd_ils_rate(*, use_cache: bool = True) -> float:
     """Live USD->ILS rate, replacing the fixed settings.usd_ils_rate /
     frontend USD_ILS_RATE constant. Raises ValueError on a missing API

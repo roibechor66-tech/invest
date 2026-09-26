@@ -5,7 +5,7 @@ including the no-API-key error convention and the ".TA" agorot caveat
 that still needs verifying against a real API key.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.deps import get_current_user
 from app.models.schemas import FxRateResponse, QuoteResponse
@@ -36,6 +36,33 @@ def get_quote_endpoint(
         previous_close=quote.previous_close,
         day_change_pct=quote.day_change_pct,
     )
+
+
+@router.get("/quotes", response_model=list[QuoteResponse])
+def get_quotes_batch_endpoint(
+    symbols: str = Query(..., description="Comma-separated list of tickers, e.g. SPY,QQQ,XLK"),
+    current_user: User = Depends(get_current_user),
+) -> list[QuoteResponse]:
+    """Live price + today's % change for several tickers in one request —
+    used by the watched-indices card (WatchedIndicesCard.tsx) so it
+    doesn't fire one HTTP round-trip per row. Unlike the single-ticker
+    endpoint above, this one never 502s: a ticker Finnhub doesn't
+    recognize (or that fails for any other reason, including a missing
+    API key) is simply left out of the returned list, so the frontend can
+    keep showing its mock figures for exactly those rows instead of the
+    whole card failing.
+    """
+    tickers = [s.strip() for s in symbols.split(",") if s.strip()]
+    quotes = market_data.get_quotes_batch(tickers)
+    return [
+        QuoteResponse(
+            ticker=q.ticker,
+            price=q.price,
+            previous_close=q.previous_close,
+            day_change_pct=q.day_change_pct,
+        )
+        for q in quotes.values()
+    ]
 
 
 @router.get("/fx-rate", response_model=FxRateResponse)
