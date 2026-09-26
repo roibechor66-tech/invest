@@ -518,7 +518,7 @@ const ZERO_INDUSTRY_AVERAGES: IndustryAverages = {
 };
 const EMPTY_METRIC_HISTORY = Object.fromEntries(
   (["peRatio", "forwardPeRatio", "evEbitda", "priceToSales", "roiPct", "roePct", "roaPct"] as MultipleKey[]).map(
-    (key) => [key, []]
+    (key): [MultipleKey, StockDetail["metricHistory"][MultipleKey]] => [key, []]
   )
 ) as StockDetail["metricHistory"];
 
