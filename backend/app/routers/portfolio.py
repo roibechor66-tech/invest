@@ -29,7 +29,7 @@ from app.models.schemas import (
     PortfolioStateResponse,
 )
 from app.models.user import User
-from app.services import market_data, portfolio_performance
+from app.services import market_data, portfolio_performance, snapshot_store
 
 router = APIRouter()
 
@@ -63,7 +63,7 @@ def _get_or_create_portfolio(db: Session, user: User) -> Portfolio:
     return portfolio
 
 
-def _serialize(portfolio: Portfolio) -> PortfolioStateResponse:
+def _serialize(portfolio: Portfolio, db: Session | None = None) -> PortfolioStateResponse:
     usd_ils_rate, fx_rate_is_live = _resolve_usd_ils_rate()
 
     # total_usd/total_usd_prev track the portfolio's value today and as of
@@ -82,12 +82,20 @@ def _serialize(portfolio: Portfolio) -> PortfolioStateResponse:
             price_is_live = True
         except ValueError:
             # No live quote available (no API key / ticker not recognized /
-            # upstream call failed) — honestly fall back to avg cost (0%
-            # unrealized P&L), exactly what this endpoint always reported
-            # before live data existed, rather than fabricating a move.
-            price = pos.avg_cost
-            previous_close = pos.avg_cost
-            day_change_pct = 0.0
+            # upstream call failed). Before falling all the way back to
+            # avg cost (0% unrealized P&L), try the last daily-scan
+            # snapshot (see app/routers/admin.py) — a real, if up to ~24h
+            # stale, price beats a frozen cost basis.
+            snapshot = snapshot_store.load_snapshot(db, pos.ticker, "quote") if db is not None else None
+            if snapshot is not None:
+                payload, _updated_at = snapshot
+                price = payload["price"]
+                previous_close = payload["previous_close"]
+                day_change_pct = payload["day_change_pct"]
+            else:
+                price = pos.avg_cost
+                previous_close = pos.avg_cost
+                day_change_pct = 0.0
             price_is_live = False
 
         amount_usd = _to_usd(pos.quantity * price, pos.currency, usd_ils_rate)
@@ -132,7 +140,7 @@ def get_my_portfolio(
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> PortfolioStateResponse:
     portfolio = _get_or_create_portfolio(db, current_user)
-    return _serialize(portfolio)
+    return _serialize(portfolio, db)
 
 
 @router.get("/performance", response_model=PortfolioPerformanceResponse)
@@ -171,7 +179,7 @@ def deposit_cash(
     portfolio.cash_usd += _to_usd(payload.amount, payload.currency, usd_ils_rate)
     db.commit()
     db.refresh(portfolio)
-    return _serialize(portfolio)
+    return _serialize(portfolio, db)
 
 
 @router.post("/positions", response_model=PortfolioStateResponse, status_code=status.HTTP_201_CREATED)
@@ -231,7 +239,7 @@ def add_position(
     portfolio.cash_usd = max(portfolio.cash_usd - amount_usd, 0.0)
     db.commit()
     db.refresh(portfolio)
-    return _serialize(portfolio)
+    return _serialize(portfolio, db)
 
 
 @router.delete("/positions/{ticker}", response_model=PortfolioStateResponse)
@@ -252,4 +260,4 @@ def remove_position(
     db.delete(existing)
     db.commit()
     db.refresh(portfolio)
-    return _serialize(portfolio)
+    return _serialize(portfolio, db)

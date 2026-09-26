@@ -120,9 +120,41 @@ every new terminal. `.env` is a local file only; never commit it (only
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `SMTP_FROM_ADDRESS` | **required only if the user opts into email alerts** | The "התראות מותאמות אישית" bot feature can deliver alerts by email in addition to (or instead of) showing them in-app. If the user turns on the email channel but these aren't all set, `POST /api/alerts/check` still runs the scan and saves the alerts in-app — it just reports that the email couldn't be sent, in a clear Hebrew message, rather than silently pretending to have sent it. |
 | `FINNHUB_API_KEY` | **required for live market data** | Powers `GET /api/market-data/quote/{ticker}` and `/fx-rate` (`backend/app/services/market_data.py`) — live price/day-change and the USD/ILS rate used across the portfolio, the trade-risk/options/volatility-stop calculators, the add-position modal, the stock detail modal and the scanner. Free tier: https://finnhub.io/register (60 calls/minute). Without this set, those lookups return a clear Hebrew error and every screen falls back to its pre-Phase-3 mock/manual behavior instead of silently fabricating a quote. |
 | — (none, no key needed) | — | `GET /api/fundamentals/{ticker}/{multiples,financial-statements,estimates,segments}` and the real portfolio-performance panel (`backend/app/services/fundamentals.py`, `portfolio_performance.py`) are powered by **yfinance (Yahoo Finance)** — free, no API key, no signup. Replaces the earlier FMP integration (`FMP_API_KEY` is no longer read; safe to remove from `.env`). Two real, permanent limitations of this free source (not a temporary plan gate): analyst estimates are best-effort (yfinance's estimate data is less complete than a paid provider's) and revenue-by-segment breakdowns aren't available at all — both come back honestly empty rather than an error, same as before. |
+| `ADMIN_REFRESH_SECRET` | **required for the daily market-data scan** | Protects `POST /api/admin/refresh-market-data` (`backend/app/routers/admin.py`) — a scan that re-fetches multiples/financial statements/quotes/price history for every ticker in use and saves it to the `market_data_snapshots` table, so live endpoints have a real (if up to ~24h stale) fallback for when a live Yahoo Finance/Finnhub call fails, instead of just an error. This endpoint has no user login, so without this secret set it refuses every request. See "Daily market-data scan" below for how it's actually triggered once a day. |
 
 `anthropic` is in `backend/requirements.txt`; a normal `pip install -r requirements.txt`
 against PyPI will install it.
+
+### Daily market-data scan
+
+`POST /api/admin/refresh-market-data` (header `X-Admin-Secret: <ADMIN_REFRESH_SECRET>`)
+re-fetches every portfolio ticker's multiples/financial statements/quote/price
+history plus the benchmark ETF proxies, and saves the result to the database
+(the `market_data_snapshots` table) — a real, persisted fallback for when a
+live Yahoo Finance/Finnhub call fails (rate-limited, ticker temporarily
+uncovered, etc.), used automatically by `GET /api/fundamentals/*`,
+`GET /api/market-data/quote(s)` and `GET /api/portfolio/*`.
+
+Render's free tier has no built-in cron/scheduler and spins the whole
+backend process down after 15 minutes idle (wiping any in-memory cache),
+so this has to be triggered from outside, once a day. This repo includes
+a free way to do that: `.github/workflows/daily-market-data-refresh.yml`,
+a GitHub Actions workflow that runs on a schedule and calls the endpoint.
+One-time setup:
+
+1. Set `ADMIN_REFRESH_SECRET` (any long random string) as an env var on
+   the Render backend service.
+2. On the GitHub repo: Settings → Secrets and variables → Actions → add a
+   **secret** named `ADMIN_REFRESH_SECRET` with the same value, and a
+   **variable** (different tab) named `BACKEND_URL` with the Render URL
+   (e.g. `https://invest-s911.onrender.com`).
+3. That's it — it runs automatically every day (04:00 UTC by default; edit
+   the `cron:` line in the workflow file to change it), and can also be
+   triggered manually any time from the repo's Actions tab ("Run workflow").
+
+Data served from a snapshot is up to ~24h stale by nature (it's only as
+fresh as the last scan) — this is a documented tradeoff, not a bug, and
+is meant as a fallback beneath live data, not a replacement for it.
 
 ## Authentication (Phase 2)
 

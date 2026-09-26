@@ -824,6 +824,11 @@ class QuoteResponse(BaseModel):
     price: float
     previous_close: float
     day_change_pct: float
+    # "live" (fresh Finnhub call) or "snapshot" (served from the last
+    # daily scan — see app/routers/admin.py — because the live call
+    # failed). Optional/defaulted so nothing breaks for existing callers
+    # that don't care about the distinction.
+    source: str = "live"
 
 
 class FxRateResponse(BaseModel):
@@ -847,6 +852,8 @@ class MultiplesResponse(BaseModel):
     roe_pct: float | None
     roa_pct: float | None
     roic_pct: float | None
+    # "live" or "snapshot" — see QuoteResponse.source above for what this means.
+    source: str = "live"
 
 
 class FinancialPeriodResponse(BaseModel):

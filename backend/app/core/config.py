@@ -101,5 +101,19 @@ class Settings:
     # doesn't cause an error; safe to remove from .env going forward.
     fmp_api_key: str = os.getenv("FMP_API_KEY", "")
 
+    # Shared secret protecting POST /api/admin/refresh-market-data (see
+    # app/routers/admin.py) — a daily scan that re-fetches multiples/
+    # financial statements/quotes/history for every ticker in use and
+    # saves the result to the market_data_snapshots table, so read
+    # endpoints have a real (if up to ~24h stale) fallback for when a
+    # live Yahoo Finance/Finnhub call fails, instead of just an error.
+    # This endpoint has no per-user login (it's meant to be triggered by
+    # an external scheduler, e.g. a GitHub Actions cron, not a logged-in
+    # browser), so without this secret set the endpoint refuses every
+    # request rather than being an open, unauthenticated write endpoint.
+    # Set it to any long random string, and configure the same value in
+    # the scheduler's request header — see README.md.
+    admin_refresh_secret: str = os.getenv("ADMIN_REFRESH_SECRET", "")
+
 
 settings = Settings()

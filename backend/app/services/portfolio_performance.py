@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.portfolio import Portfolio
 from app.models.schemas import PortfolioPerformancePeriod, PortfolioPerformanceResponse
-from app.services import market_data
+from app.services import market_data, snapshot_store
 from app.services.yfinance_session import call_with_retry, get_ticker
 
 # Bumped from 1 hour to 4 hours after discovering (in production, on
@@ -73,15 +73,40 @@ BENCHMARK_PROXY_TICKERS: dict[str, list[str]] = {
 _last_fetch_error: dict[str, str] = {}  # ticker -> human-readable reason, for diagnostics only
 
 
-def _fetch_history(ticker: str, *, use_cache: bool = True) -> list[tuple[date, float]]:
+def _history_to_snapshot_payload(series: list[tuple[date, float]]) -> list[list]:
+    """[[iso_date, close], ...] — JSON-safe shape for snapshot_store."""
+    return [[d.isoformat(), c] for d, c in series]
+
+
+def _history_from_snapshot_payload(payload: list[list]) -> list[tuple[date, float]]:
+    return [(date.fromisoformat(d), float(c)) for d, c in payload]
+
+
+def fetch_history_for_snapshot(ticker: str) -> list[tuple[date, float]]:
+    """Public, no-cache wrapper around `_fetch_history` for the daily-scan
+    admin endpoint (app/routers/admin.py) to call directly — bypasses the
+    in-memory cache (since the whole point of the scan is a fresh pull)
+    and never touches the snapshot table itself (writing snapshots is the
+    admin endpoint's job, via snapshot_store.save_snapshot)."""
+    return _fetch_history(ticker, use_cache=False)
+
+
+def _fetch_history(
+    ticker: str, *, use_cache: bool = True, db: Session | None = None
+) -> list[tuple[date, float]]:
     """Daily close prices for `ticker` over roughly the last 400 calendar
     days (covers the "yearly" lookback with margin), sorted ascending by
-    date, via yfinance (Yahoo Finance) — no API key needed. Returns an
-    empty list (not an exception) when Yahoo has no data for the ticker
-    or the call fails — callers treat that as "skip this ticker/
-    benchmark". The failure reason is recorded in `_last_fetch_error` so
-    the final all-tickers-failed message can tell the user *why* instead
-    of just "no data found"."""
+    date, via yfinance (Yahoo Finance) — no API key needed.
+
+    When `db` is given and the live call comes back empty (Yahoo down,
+    rate-limited, or this ticker not covered), falls back to the last
+    daily-scan snapshot for this ticker (see app/routers/admin.py) before
+    giving up — real but possibly up-to-~24h-stale prices instead of no
+    data at all. Still returns an empty list (not an exception) if there
+    is no live data AND no snapshot either — callers treat that as "skip
+    this ticker/benchmark". The failure reason is recorded in
+    `_last_fetch_error` so the final all-tickers-failed message can tell
+    the user *why* instead of just "no data found"."""
     ticker = ticker.strip().upper()
 
     if use_cache:
@@ -97,13 +122,11 @@ def _fetch_history(ticker: str, *, use_cache: bool = True) -> list[tuple[date, f
         )
     except Exception as exc:  # yfinance raises assorted exceptions on network/parse failure
         _last_fetch_error[ticker] = f"{ticker}: קריאת הרשת ל-Yahoo Finance נכשלה ({exc})"
-        _history_cache[ticker] = (time.time(), [])
-        return []
+        return _fallback_to_snapshot_history(ticker, db)
 
     if history is None or history.empty or "Close" not in history.columns:
         _last_fetch_error[ticker] = f"{ticker}: Yahoo Finance החזיר תגובה ריקה (ייתכן שהטיקר אינו מכוסה)"
-        _history_cache[ticker] = (time.time(), [])
-        return []
+        return _fallback_to_snapshot_history(ticker, db)
 
     series: list[tuple[date, float]] = []
     for timestamp, close in history["Close"].items():
@@ -115,21 +138,43 @@ def _fetch_history(ticker: str, *, use_cache: bool = True) -> list[tuple[date, f
             continue
         series.append((timestamp.date(), close_value))
     series.sort(key=lambda item: item[0])
-    _history_cache[ticker] = (time.time(), series)
-    if series:
-        _last_fetch_error.pop(ticker, None)
-    else:
+
+    if not series:
         _last_fetch_error[ticker] = f"{ticker}: Yahoo Finance לא החזיר נתוני מחיר תקינים"
+        return _fallback_to_snapshot_history(ticker, db)
+
+    _history_cache[ticker] = (time.time(), series)
+    _last_fetch_error.pop(ticker, None)
     return series
 
 
-def _fetch_history_first_available(tickers: list[str]) -> tuple[list[tuple[date, float]], str | None]:
+def _fallback_to_snapshot_history(ticker: str, db: Session | None) -> list[tuple[date, float]]:
+    """Last resort inside `_fetch_history`: the last daily-scan snapshot
+    for this ticker's price history, if one exists and a db session was
+    given. Does NOT populate `_history_cache` — a snapshot fallback should
+    be re-attempted against Yahoo on the next call, not cached as if it
+    were a fresh live result."""
+    if db is None:
+        return []
+    loaded = snapshot_store.load_snapshot(db, ticker, "history")
+    if loaded is None:
+        return []
+    payload, _updated_at = loaded
+    try:
+        return _history_from_snapshot_payload(payload)
+    except (TypeError, ValueError):
+        return []
+
+
+def _fetch_history_first_available(
+    tickers: list[str], db: Session | None = None
+) -> tuple[list[tuple[date, float]], str | None]:
     """Tries each ticker in `tickers` in order (see BENCHMARK_PROXY_TICKERS'
     module docstring note on unverified TASE symbol conventions) and
     returns the first non-empty series, plus which ticker resolved (or
     None if none did)."""
     for candidate in tickers:
-        series = _fetch_history(candidate)
+        series = _fetch_history(candidate, db=db)
         if series:
             return series, candidate
     return [], None
@@ -182,7 +227,7 @@ def compute_portfolio_performance(db: Session, portfolio: Portfolio) -> Portfoli
     skipped_tickers: list[str] = []
 
     for pos in positions:
-        series = _fetch_history(pos.ticker)
+        series = _fetch_history(pos.ticker, db=db)
         if not series:
             skipped_tickers.append(pos.ticker)
             continue
@@ -217,7 +262,7 @@ def compute_portfolio_performance(db: Session, portfolio: Portfolio) -> Portfoli
     benchmark_series: dict[str, list[tuple[date, float]]] = {}
     unavailable_benchmarks: list[str] = []
     for benchmark_id, proxy_tickers in BENCHMARK_PROXY_TICKERS.items():
-        series, _resolved_ticker = _fetch_history_first_available(proxy_tickers)
+        series, _resolved_ticker = _fetch_history_first_available(proxy_tickers, db=db)
         if series:
             benchmark_series[benchmark_id] = series
         else:

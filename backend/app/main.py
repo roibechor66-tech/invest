@@ -22,6 +22,7 @@ from app.core.database import Base, engine
 # app.core.deps, but `portfolio` has no other import path yet.
 from app.models import portfolio as portfolio_models  # noqa: F401
 from app.models import uploaded_financials as uploaded_financials_models  # noqa: F401
+from app.models import market_data_snapshot as market_data_snapshot_models  # noqa: F401
 from app.routers import (
     auth,
     portfolio,
@@ -33,6 +34,7 @@ from app.routers import (
     scanner,
     market_data,
     fundamentals,
+    admin,
 )
 
 # Create tables on startup. For anything beyond local dev, use a real
@@ -78,6 +80,7 @@ app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(scanner.router, prefix="/api/scanner", tags=["scanner"])
 app.include_router(market_data.router, prefix="/api/market-data", tags=["market-data"])
 app.include_router(fundamentals.router, prefix="/api/fundamentals", tags=["fundamentals"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/api/health")

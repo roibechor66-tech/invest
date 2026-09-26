@@ -18,7 +18,7 @@ from app.models.schemas import (
     RevenueSegmentResponse,
 )
 from app.models.user import User
-from app.services import fundamentals, uploaded_financials
+from app.services import fundamentals, snapshot_store, uploaded_financials
 from app.services import research as research_service
 
 router = APIRouter()
@@ -28,18 +28,22 @@ MAX_UPLOAD_BYTES = 32 * 1024 * 1024  # matches Claude's own PDF document limit
 
 @router.get("/{ticker}/multiples", response_model=MultiplesResponse)
 def get_multiples_endpoint(
-    ticker: str, current_user: User = Depends(get_current_user)
+    ticker: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> MultiplesResponse:
     """Live company profile + trailing multiples/profitability ratios.
 
-    Real FMP call, not mock data. Returns 502 with a clear Hebrew message
-    if the API key isn't configured, the ticker isn't recognized, or the
-    endpoint is restricted on the caller's FMP plan — never a silently
-    fabricated number.
+    Real yfinance call, not mock data. Falls back to the last daily-scan
+    snapshot (source="snapshot" — see app/routers/admin.py) if the live
+    call fails; only raises 502 (clear Hebrew message) when the ticker
+    has no snapshot either — never a silently fabricated number.
     """
     try:
         m = fundamentals.get_multiples(ticker)
     except ValueError as exc:
+        loaded = snapshot_store.load_snapshot(db, ticker, "multiples")
+        if loaded is not None:
+            payload, _updated_at = loaded
+            return MultiplesResponse(**payload, source="snapshot")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return MultiplesResponse(
         ticker=m.ticker,
@@ -66,14 +70,15 @@ def get_financial_statements_endpoint(
 ) -> list[FinancialPeriodResponse]:
     """Per-period revenue/EBITDA/net-income/FCF/cash/debt series.
 
-    Tries live FMP first (income-statement + balance-sheet + cash-flow-
-    statement, combined) — real data, not mock. If FMP fails (no API key,
-    ticker not covered, plan-restricted, etc.), falls back to whatever the
-    user has uploaded and had extracted from a PDF report for this ticker
-    (see POST /{ticker}/upload-report and app/services/uploaded_financials.py) —
-    each returned period is tagged `source: "fmp"` or `"uploaded"` so the
-    frontend can show the distinction. Only raises 502 if BOTH sources
-    come up empty.
+    Tries live yfinance first (income-statement + balance-sheet + cash-
+    flow-statement, combined) — real data, not mock. If that fails (no
+    data for this ticker, Yahoo rate-limited, etc.), falls back in order
+    to: (1) whatever the user has uploaded and had extracted from a PDF
+    report for this ticker (see POST /{ticker}/upload-report and
+    app/services/uploaded_financials.py), then (2) the last daily-scan
+    snapshot (see app/routers/admin.py) — each returned period is tagged
+    `source: "fmp"` / `"uploaded"` / `"snapshot"` so the frontend can show
+    the distinction. Only raises 502 if all three sources come up empty.
     """
     try:
         periods = fundamentals.get_financial_statements(ticker, period=period, limit=limit)
@@ -81,6 +86,10 @@ def get_financial_statements_endpoint(
         uploaded = uploaded_financials.get_periods(db, ticker, period, limit)
         if uploaded:
             return uploaded
+        loaded = snapshot_store.load_snapshot(db, ticker, f"statements_{period}")
+        if loaded is not None:
+            payload, _updated_at = loaded
+            return [FinancialPeriodResponse(**item, source="snapshot") for item in payload[:limit]]
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(fmp_error))
     return [
         FinancialPeriodResponse(
@@ -176,16 +185,20 @@ async def upload_report_endpoint(
 
 @router.get("/{ticker}/estimates", response_model=list[AnalystEstimateResponse])
 def get_analyst_estimates_endpoint(
-    ticker: str, current_user: User = Depends(get_current_user)
+    ticker: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> list[AnalystEstimateResponse]:
     """Forward analyst revenue/EPS estimates. Returns an EMPTY LIST (200,
-    not an error) when this is unavailable on the caller's FMP plan or
-    for this ticker — a real but honest "no forward estimates" state, not
-    a failure. Still returns 502 on a missing API key or a transport
-    failure (see fundamentals.get_analyst_estimates)."""
+    not an error) when this is unavailable for this ticker — a real but
+    honest "no forward estimates" state, not a failure. On a transport
+    failure, falls back to the last daily-scan snapshot (see
+    app/routers/admin.py) before raising 502."""
     try:
         years = fundamentals.get_analyst_estimates(ticker)
     except ValueError as exc:
+        loaded = snapshot_store.load_snapshot(db, ticker, "estimates")
+        if loaded is not None:
+            payload, _updated_at = loaded
+            return [AnalystEstimateResponse(**item) for item in payload]
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return [
         AnalystEstimateResponse(
@@ -201,14 +214,19 @@ def get_analyst_estimates_endpoint(
 
 @router.get("/{ticker}/segments", response_model=list[RevenueSegmentResponse])
 def get_revenue_segments_endpoint(
-    ticker: str, current_user: User = Depends(get_current_user)
+    ticker: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> list[RevenueSegmentResponse]:
     """Business-segment revenue breakdown (feeds the SOTP workspace).
-    Returns an EMPTY LIST (200, not an error) when unavailable on the
-    caller's FMP plan or for this ticker — the SOTP workspace already has
-    a single-segment fallback for exactly this case."""
+    Returns an EMPTY LIST (200, not an error) when unavailable for this
+    ticker — the SOTP workspace already has a single-segment fallback for
+    exactly this case. On a transport failure, falls back to the last
+    daily-scan snapshot (see app/routers/admin.py) before raising 502."""
     try:
         segments = fundamentals.get_revenue_segments(ticker)
     except ValueError as exc:
+        loaded = snapshot_store.load_snapshot(db, ticker, "segments")
+        if loaded is not None:
+            payload, _updated_at = loaded
+            return [RevenueSegmentResponse(**item) for item in payload]
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return [RevenueSegmentResponse(name=s.name, revenue_share_pct=s.revenue_share_pct) for s in segments]
