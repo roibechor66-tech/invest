@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Local SQLite DB (never commit real user data)
+*.db
+investment_platform.db
+
+# Env files with real secrets — only .env.example is tracked
+.env
+backend/.env
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

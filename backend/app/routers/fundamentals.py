@@ -1,0 +1,214 @@
+"""Live financials/multiples/valuation-input endpoints (Phase 3, third
+track — FMP). See app/services/fundamentals.py for the integration
+itself, including the no-API-key error convention, the plan-restricted
+(analyst estimates / segments) empty-list convention, and the several
+unverified field-name/ordering caveats that still need checking against
+a real FMP key.
+"""
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.core.deps import get_current_user
+from app.models.schemas import (
+    AnalystEstimateResponse,
+    FinancialPeriodResponse,
+    MultiplesResponse,
+    RevenueSegmentResponse,
+)
+from app.models.user import User
+from app.services import fundamentals, uploaded_financials
+from app.services import research as research_service
+
+router = APIRouter()
+
+MAX_UPLOAD_BYTES = 32 * 1024 * 1024  # matches Claude's own PDF document limit
+
+
+@router.get("/{ticker}/multiples", response_model=MultiplesResponse)
+def get_multiples_endpoint(
+    ticker: str, current_user: User = Depends(get_current_user)
+) -> MultiplesResponse:
+    """Live company profile + trailing multiples/profitability ratios.
+
+    Real FMP call, not mock data. Returns 502 with a clear Hebrew message
+    if the API key isn't configured, the ticker isn't recognized, or the
+    endpoint is restricted on the caller's FMP plan — never a silently
+    fabricated number.
+    """
+    try:
+        m = fundamentals.get_multiples(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return MultiplesResponse(
+        ticker=m.ticker,
+        name=m.name,
+        sector=m.sector,
+        market_cap_usd=m.market_cap_usd,
+        price_usd=m.price_usd,
+        pe_ratio=m.pe_ratio,
+        ev_ebitda=m.ev_ebitda,
+        price_to_sales=m.price_to_sales,
+        roe_pct=m.roe_pct,
+        roa_pct=m.roa_pct,
+        roic_pct=m.roic_pct,
+    )
+
+
+@router.get("/{ticker}/financial-statements", response_model=list[FinancialPeriodResponse])
+def get_financial_statements_endpoint(
+    ticker: str,
+    period: str = Query("quarter", pattern="^(quarter|annual)$"),
+    limit: int = Query(8, ge=1, le=20),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[FinancialPeriodResponse]:
+    """Per-period revenue/EBITDA/net-income/FCF/cash/debt series.
+
+    Tries live FMP first (income-statement + balance-sheet + cash-flow-
+    statement, combined) — real data, not mock. If FMP fails (no API key,
+    ticker not covered, plan-restricted, etc.), falls back to whatever the
+    user has uploaded and had extracted from a PDF report for this ticker
+    (see POST /{ticker}/upload-report and app/services/uploaded_financials.py) —
+    each returned period is tagged `source: "fmp"` or `"uploaded"` so the
+    frontend can show the distinction. Only raises 502 if BOTH sources
+    come up empty.
+    """
+    try:
+        periods = fundamentals.get_financial_statements(ticker, period=period, limit=limit)
+    except ValueError as fmp_error:
+        uploaded = uploaded_financials.get_periods(db, ticker, period, limit)
+        if uploaded:
+            return uploaded
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(fmp_error))
+    return [
+        FinancialPeriodResponse(
+            period_label=p.period_label,
+            revenue_usd_m=p.revenue_usd_m,
+            ebitda_usd_m=p.ebitda_usd_m,
+            net_income_usd_m=p.net_income_usd_m,
+            fcf_usd_m=p.fcf_usd_m,
+            cash_usd_m=p.cash_usd_m,
+            debt_usd_m=p.debt_usd_m,
+            shares_outstanding_m=p.shares_outstanding_m,
+            cogs_usd_m=p.cogs_usd_m,
+            gross_profit_usd_m=p.gross_profit_usd_m,
+            sga_usd_m=p.sga_usd_m,
+            rd_usd_m=p.rd_usd_m,
+            operating_income_usd_m=p.operating_income_usd_m,
+            pretax_income_usd_m=p.pretax_income_usd_m,
+            tax_usd_m=p.tax_usd_m,
+            source="fmp",
+        )
+        for p in periods
+    ]
+
+
+@router.post("/{ticker}/upload-report", response_model=list[FinancialPeriodResponse])
+async def upload_report_endpoint(
+    ticker: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[FinancialPeriodResponse]:
+    """Upload a company's PDF report (10-K/10-Q/annual report) and extract
+    comprehensive financial-statement data from it with Claude (native PDF
+    support — same pattern as /api/research/analyze-report), then persist
+    it permanently for this ticker so it appears everywhere in the app
+    that already reads financial-statement data, as a fallback beneath
+    live FMP data (see GET /{ticker}/financial-statements above).
+
+    Real Claude call on the actual uploaded file, not mock data — same
+    declared exception/error convention as the rest of the AI features:
+    502 with a clear Hebrew message on failure, never a silent fallback.
+    """
+    filename = file.filename or "report.pdf"
+    is_pdf = filename.lower().endswith(".pdf") or file.content_type == "application/pdf"
+    if not is_pdf:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="יש להעלות קובץ PDF בלבד"
+        )
+
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="הקובץ שהועלה ריק")
+    if len(pdf_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="הקובץ גדול מדי (מקסימום 32MB)"
+        )
+
+    try:
+        extraction = research_service.extract_financials_from_pdf(pdf_bytes, filename, ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    uploaded_financials.upsert_periods(
+        db,
+        ticker,
+        extraction.periods,
+        source_filename=filename,
+        uploaded_by_user_id=current_user.id,
+    )
+
+    return [
+        FinancialPeriodResponse(
+            period_label=p.period_label,
+            revenue_usd_m=p.revenue_usd_m,
+            ebitda_usd_m=p.ebitda_usd_m,
+            net_income_usd_m=p.net_income_usd_m,
+            fcf_usd_m=p.fcf_usd_m,
+            cash_usd_m=p.cash_usd_m or 0.0,
+            debt_usd_m=p.debt_usd_m or 0.0,
+            shares_outstanding_m=p.shares_outstanding_m,
+            cogs_usd_m=p.cogs_usd_m,
+            gross_profit_usd_m=p.gross_profit_usd_m,
+            sga_usd_m=p.sga_usd_m,
+            rd_usd_m=p.rd_usd_m,
+            operating_income_usd_m=p.operating_income_usd_m,
+            pretax_income_usd_m=p.pretax_income_usd_m,
+            tax_usd_m=p.tax_usd_m,
+            source="uploaded",
+        )
+        for p in extraction.periods
+    ]
+
+
+@router.get("/{ticker}/estimates", response_model=list[AnalystEstimateResponse])
+def get_analyst_estimates_endpoint(
+    ticker: str, current_user: User = Depends(get_current_user)
+) -> list[AnalystEstimateResponse]:
+    """Forward analyst revenue/EPS estimates. Returns an EMPTY LIST (200,
+    not an error) when this is unavailable on the caller's FMP plan or
+    for this ticker — a real but honest "no forward estimates" state, not
+    a failure. Still returns 502 on a missing API key or a transport
+    failure (see fundamentals.get_analyst_estimates)."""
+    try:
+        years = fundamentals.get_analyst_estimates(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return [
+        AnalystEstimateResponse(
+            period_label=y.period_label,
+            estimated_revenue_usd_m=y.estimated_revenue_usd_m,
+            estimated_eps=y.estimated_eps,
+            revenue_growth_pct=y.revenue_growth_pct,
+            eps_growth_pct=y.eps_growth_pct,
+        )
+        for y in years
+    ]
+
+
+@router.get("/{ticker}/segments", response_model=list[RevenueSegmentResponse])
+def get_revenue_segments_endpoint(
+    ticker: str, current_user: User = Depends(get_current_user)
+) -> list[RevenueSegmentResponse]:
+    """Business-segment revenue breakdown (feeds the SOTP workspace).
+    Returns an EMPTY LIST (200, not an error) when unavailable on the
+    caller's FMP plan or for this ticker — the SOTP workspace already has
+    a single-segment fallback for exactly this case."""
+    try:
+        segments = fundamentals.get_revenue_segments(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return [RevenueSegmentResponse(name=s.name, revenue_share_pct=s.revenue_share_pct) for s in segments]

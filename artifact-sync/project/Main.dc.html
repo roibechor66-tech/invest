@@ -1,0 +1,1342 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>לוח בקרה - פלטפורמת השקעות (כהה)</title>
+<script src="./support.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  body { margin: 0; font-family: 'Assistant', 'Segoe UI', Arial, sans-serif; background: #0f1115; color: #e2e8f0; }
+  button { font-family: inherit; cursor: pointer; }
+  table { border-collapse: collapse; }
+  .card-btn:hover { border-color: rgba(59,130,246,0.5) !important; background: #1e222b !important; }
+  .row-btn:hover { background: #1e222b !important; }
+  select { font-family: inherit; }
+</style>
+</helmet>
+
+<div style="width: 100%; min-height: 1500px; box-sizing: border-box; display: flex; flex-direction: column; background: #0f1115;">
+
+  <!-- Header -->
+  <header style="display: flex; align-items: center; justify-content: space-between; background: #171a21; border-bottom: 1px solid #272b35; padding: 20px 40px;">
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <div style="width: 44px; height: 44px; border-radius: 12px; background: #3b82f6; display: flex; align-items: center; justify-content: center; color: #ffffff; font-size: 20px; font-weight: 700;">₪</div>
+      <div>
+        <div style="font-size: 20px; font-weight: 800; color: #f1f5f9;">מערכת השקעות וניהול סיכונים</div>
+        <div style="font-size: 13px; color: #64748b;">לוח בקרה אישי לניהול תיק, הערכות שווי ובריפים אוטומטיים</div>
+      </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <div style="font-size: 14px; color: #64748b;">יום שבת, 19 בספטמבר 2026</div>
+      <div style="display: flex; align-items: center; gap: 10px; border-inline-start: 1px solid #272b35; padding-inline-start: 16px;">
+        <span style="font-size: 13px; color: #cbd5e1;">שלום, roi_invest</span>
+        <span style="font-size: 11px; color: #64748b; border: 1px solid #272b35; border-radius: 8px; padding: 3px 8px;">התנתקות</span>
+      </div>
+    </div>
+  </header>
+
+  <div style="max-width: 1280px; width: 100%; margin: 0 auto; padding: 32px 40px 64px; display: flex; flex-direction: column; gap: 32px; box-sizing: border-box;">
+
+    <!-- Stock search -->
+    <section style="background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 20px 24px;">
+      <div style="font-size: 16px; font-weight: 700; color: #f1f5f9;">חיפוש מניות</div>
+      <div style="margin-top: 4px; font-size: 13px; color: #64748b;">הקלידו טיקר (למשל AAPL) כדי לראות מכפילים, מגמות, סטייג', תחזיות צמיחה, תזות וחדשות — בדיוק כמו לחיצה על מניה בתיק.</div>
+      <div style="margin-top: 12px; display: flex; gap: 8px;">
+        <input value="{{searchQuery}}" onChange="{{onSearchChange}}" placeholder="לדוגמה: AAPL, TSLA..." style="flex-grow: 1; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: 14px;" />
+        <button onClick="{{onSearchSubmit}}" style="background: #3b82f6; color: #ffffff; border: none; border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 700;">חיפוש</button>
+      </div>
+      <sc-if value="{{searchNotFound}}" hint-placeholder-val="{{false}}">
+        <div style="margin-top: 10px; font-size: 13px; color: #f0576a;">הטיקר "{{searchQuery}}" לא נמצא. במסד הדמו זמינים: NVDA, MSFT, TSM, VRT, TEVA.TA, POLI.TA, AAPL, TSLA. חיפוש חי לכל טיקר יתווסף בשלב 3.</div>
+      </sc-if>
+    </section>
+
+    <!-- Portfolio summary -->
+    <section style="background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 24px 28px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;">
+        <div>
+          <div style="font-size: 14px; color: #64748b;">שווי תיק כולל</div>
+          <div style="font-size: 34px; font-weight: 800; color: #f1f5f9;">‎$284,650</div>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 18px; font-weight: 700; color: #34c77b;">+1.24% (‎$3,487)</div>
+          <div style="font-size: 13px; color: #64748b;">שינוי יומי</div>
+        </div>
+        <div style="text-align: left;">
+          <div style="font-size: 18px; font-weight: 700; color: #cbd5e1;">8.5%</div>
+          <div style="font-size: 13px; color: #64748b;">מזומן בתיק</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 20px; overflow-x: auto;">
+        <table style="width: 100%; min-width: 720px; font-size: 14px;">
+          <thead>
+            <tr style="border-bottom: 1px solid #272b35; color: #64748b;">
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">נייר</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">כמות</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">מחיר קנייה ממוצע</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">מחיר אחרון</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">רווח/הפסד</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">משקל בתיק</th>
+              <th style="padding: 8px 0; text-align: right; font-weight: 500;">שינוי יומי</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{holdings}}" as="h" hint-placeholder-count="6">
+              <tr class="row-btn" onClick="{{h.pick}}" style="border-bottom: 1px solid rgba(39,43,53,0.7); cursor: pointer;">
+                <td style="padding: 8px 0;"><span style="font-weight: 700; color: #f1f5f9;">{{h.ticker}}</span><span style="margin-inline-start: 8px; color: #64748b;">{{h.name}}</span></td>
+                <td style="padding: 8px 0; color: #94a3b8;">{{h.qty}}</td>
+                <td style="padding: 8px 0; color: #94a3b8;">{{h.avgCost}}</td>
+                <td style="padding: 8px 0; color: #94a3b8;">{{h.price}}</td>
+                <td style="padding: 8px 0; font-weight: 600; color: {{h.pnlColor}};">{{h.pnl}}</td>
+                <td style="padding: 8px 0; color: #94a3b8;">{{h.weight}}</td>
+                <td style="padding: 8px 0; font-weight: 600; color: {{h.changeColor}};">{{h.change}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top: 8px; font-size: 11px; color: #64748b;">לחצו על שורה כדי לראות פרטים מורחבים על הנייר</div>
+    </section>
+
+    <!-- Watched indices -->
+    <section style="background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 20px 24px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;">
+        <div style="font-size: 16px; font-weight: 700; color: #f1f5f9;">מדדים נבחרים</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+          <sc-for list="{{indexPeriods}}" as="p" hint-placeholder-count="6">
+            <button onClick="{{p.pick}}" style="border: none; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 600; background: {{p.bg}}; color: {{p.color}};">{{p.label}}</button>
+          </sc-for>
+        </div>
+      </div>
+      <div style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid #272b35; padding-bottom: 12px;">
+        <sc-for list="{{indexCategories}}" as="c" hint-placeholder-count="4">
+          <button onClick="{{c.pick}}" style="border: none; border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; background: {{c.bg}}; color: {{c.color}}; box-shadow: {{c.ring}};">{{c.label}}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{isMainCategory}}" hint-placeholder-val="{{true}}">
+        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px;">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">ישראל</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ilIndices}}" as="idx" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; justify-content: space-between; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 8px 12px;">
+                  <span style="font-size: 13px; color: #cbd5e1;">{{idx.label}}</span>
+                  <span style="font-size: 13px; color: #94a3b8;">{{idx.value}} <span style="color: {{idx.color}}; font-weight: 600;">{{idx.change}}</span></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px;">ארה"ב</div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{globalIndices}}" as="idx" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; justify-content: space-between; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 8px 12px;">
+                  <span style="font-size: 13px; color: #cbd5e1;">{{idx.label}}</span>
+                  <span style="font-size: 13px; color: #94a3b8;">{{idx.value}} <span style="color: {{idx.color}}; font-weight: 600;">{{idx.change}}</span></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isOtherCategory}}" hint-placeholder-val="{{false}}">
+        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+          <sc-for list="{{categoryIndices}}" as="idx" hint-placeholder-count="9">
+            <div style="display: flex; align-items: center; justify-content: space-between; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 8px 12px;">
+              <span style="font-size: 13px; color: #cbd5e1;">{{idx.label}}</span>
+              <span style="font-size: 13px; color: #94a3b8;">{{idx.value}} <span style="color: {{idx.color}}; font-weight: 600;">{{idx.change}}</span></span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top: 10px; font-size: 11px; color: #64748b;">נתוני תעודות הסל/המדדים לעיל הם דמה להדגמת המסך. בשלב 3 יחוברו למקור שערים חי.</div>
+      </sc-if>
+    </section>
+
+    <!-- Performance by period -->
+    <section style="background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 20px 24px;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;">
+        <div style="font-size: 16px; font-weight: 700; color: #f1f5f9;">ביצועי תיק לפי תקופה</div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 12px; color: #64748b;">השוואה מול:</span>
+          <select onChange="{{onBenchmarkChange}}" style="background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 5px 10px; font-size: 12px;">
+            <sc-for list="{{benchmarkOptions}}" as="b" hint-placeholder-count="5">
+              <option value="{{b.id}}">{{b.label}}</option>
+            </sc-for>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px;">
+        <sc-for list="{{performance}}" as="p" hint-placeholder-count="5">
+          <div style="border: 1px solid #272b35; background: #1e222b; border-radius: 10px; padding: 14px;">
+            <div style="font-size: 12px; color: #94a3b8;">{{p.label}}</div>
+            <div style="margin-top: 4px; font-size: 20px; font-weight: 800; color: {{p.color}};">{{p.value}}</div>
+            <div style="margin-top: 4px; font-size: 11px; color: #64748b;">{{p.benchmarkLabel}}: {{p.benchmarkValue}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Section 1: Portfolio & Risk (core, LARGE) -->
+    <section style="display: flex; flex-direction: column; gap: 16px;">
+      <div>
+        <div style="font-size: 20px; font-weight: 700; color: #f1f5f9;">ניהול תיק וסיכונים</div>
+        <div style="font-size: 14px; color: #64748b;">מעקב אחזקות, גודל פוזיציה והערכות שווי מותאמות אישית</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+        <sc-for list="{{riskButtons}}" as="btn" hint-placeholder-count="3">
+          <button class="card-btn" onClick="{{btn.pick}}" style="text-align: right; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start;">
+            <span style="width: 46px; height: 46px; border-radius: 12px; background: rgba(59,130,246,0.12); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 22px;">{{btn.emoji}}</span>
+            <span style="font-size: 18px; font-weight: 700; color: #f1f5f9;">{{btn.label}}</span>
+            <span style="font-size: 14px; color: #94a3b8; line-height: 1.5;">{{btn.desc}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Section 2: Analyst Bot Briefs (compact, SMALL) -->
+    <section style="display: flex; flex-direction: column; gap: 14px;">
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.04em;">הבוט האנליסט האוטומטי</div>
+        <div style="font-size: 12px; color: #64748b;">בריפים מבוססי AI לפי לחיצת כפתור</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px;">
+        <sc-for list="{{briefButtons}}" as="btn" hint-placeholder-count="6">
+          <button class="card-btn" onClick="{{btn.pick}}" style="text-align: right; background: #171a21; border: 1px solid #272b35; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start;">
+            <span style="width: 26px; height: 26px; border-radius: 8px; background: rgba(59,130,246,0.12); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 13px;">{{btn.emoji}}</span>
+            <span style="font-size: 12px; font-weight: 600; color: #cbd5e1; line-height: 1.3;">{{btn.label}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Section 3: Deep research (core, LARGE) -->
+    <section style="display: flex; flex-direction: column; gap: 16px;">
+      <div>
+        <div style="font-size: 20px; font-weight: 700; color: #f1f5f9;">מחקר מעמיק וסיכומים</div>
+        <div style="font-size: 14px; color: #64748b;">ניתוח דוחות, בניית תזות השקעה וסיכומים שבועיים</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px;">
+        <sc-for list="{{researchButtons}}" as="btn" hint-placeholder-count="3">
+          <button class="card-btn" onClick="{{btn.pick}}" style="text-align: right; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start;">
+            <span style="width: 46px; height: 46px; border-radius: 12px; background: rgba(59,130,246,0.12); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 22px;">{{btn.emoji}}</span>
+            <span style="font-size: 18px; font-weight: 700; color: #f1f5f9;">{{btn.label}}</span>
+            <span style="font-size: 14px; color: #94a3b8; line-height: 1.5;">{{btn.desc}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Generic action modal (buttons) -->
+  <sc-if value="{{modalOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;">
+      <div style="width: 100%; max-width: 480px; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+          <div style="font-size: 18px; font-weight: 700; color: #f1f5f9;">{{modalTitle}}</div>
+          <button onClick="{{closeModal}}" aria-label="סגור" style="background: none; border: none; color: #64748b; font-size: 18px; line-height: 1;">✕</button>
+        </div>
+        <div style="margin-top: 16px; font-size: 14px; line-height: 1.7; color: #94a3b8;">זהו שלב 1/3 טרם הושלם עבור כפתור זה — הלוגיקה האמיתית (חיבור ל-API, מנוע ה-AI או בריפים חיים) תתווסף בהמשך הפרויקט.</div>
+        <button onClick="{{closeModal}}" style="margin-top: 20px; width: 100%; background: #3b82f6; color: #ffffff; border: none; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 700;">הבנתי</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Stock detail modal -->
+  <sc-if value="{{stockModalOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;">
+      <div style="width: 100%; max-width: 600px; max-height: 82vh; overflow-y: auto; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+          <div>
+            <div style="font-size: 18px; font-weight: 700; color: #f1f5f9;">{{selectedStock.ticker}} <span style="color: #64748b; font-weight: 400;">· {{selectedStock.name}}</span></div>
+            <div style="margin-top: 2px; font-size: 13px; color: #64748b;">שווי שוק: {{selectedStock.marketCap}} · ענף: {{selectedStock.sector}}</div>
+          </div>
+          <button onClick="{{closeStockModal}}" aria-label="סגור" style="background: none; border: none; color: #64748b; font-size: 18px; line-height: 1;">✕</button>
+        </div>
+
+        <div style="margin-top: 18px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">מכפילי שווי <span style="text-transform: none; color: #475569;">(לחצו למגמה רבעונית)</span></div>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+          <sc-for list="{{selectedStock.valuationTiles}}" as="m" hint-placeholder-count="3">
+            <button onClick="{{m.pick}}" style="text-align: center; background: {{m.bg}}; border: 1px solid {{m.border}}; border-radius: 8px; padding: 10px;">
+              <div style="font-size: 11px; color: #94a3b8;">{{m.label}}</div>
+              <div style="margin-top: 4px; font-size: 16px; font-weight: 700; color: #f1f5f9;">{{m.value}}</div>
+              <div style="margin-top: 2px; font-size: 10px; color: #64748b;">ממוצע ענף: {{m.avg}}</div>
+            </button>
+          </sc-for>
+        </div>
+
+        <div style="margin-top: 16px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em;">מדדי רווחיות <span style="text-transform: none; color: #475569;">(לחצו למגמה רבעונית)</span></div>
+        <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+          <sc-for list="{{selectedStock.profitabilityTiles}}" as="m" hint-placeholder-count="3">
+            <button onClick="{{m.pick}}" style="text-align: center; background: {{m.bg}}; border: 1px solid {{m.border}}; border-radius: 8px; padding: 10px;">
+              <div style="font-size: 11px; color: #94a3b8;">{{m.label}}</div>
+              <div style="margin-top: 4px; font-size: 16px; font-weight: 700; color: #f1f5f9;">{{m.value}}</div>
+              <div style="margin-top: 2px; font-size: 10px; color: #64748b;">ממוצע ענף: {{m.avg}}</div>
+            </button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{selectedStock.hasChart}}" hint-placeholder-val="{{false}}">
+          <div style="margin-top: 12px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 12px;">
+            <div style="font-size: 12px; font-weight: 600; color: #cbd5e1;">{{selectedStock.chartLabel}} — מגמה רבעונית (8 רבעונים אחרונים)</div>
+            <div style="position: relative; width: 100%; padding-top: 30.357%; margin-top: 8px;">
+              <svg viewBox="0 0 560 170" preserveAspectRatio="none" style="position: absolute; inset: 0; width: 100%; height: 100%;">
+                <sc-for list="{{selectedStock.chartYTicks}}" as="yt" hint-placeholder-count="5">
+                  <line x1="40" x2="544" y1="{{yt.y}}" y2="{{yt.y}}" stroke="#272b35" stroke-width="1" stroke-dasharray="{{yt.dash}}"></line>
+                </sc-for>
+                <path d="{{selectedStock.chartPath}}" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+                <sc-for list="{{selectedStock.chartPoints}}" as="pt" hint-placeholder-count="8">
+                  <circle cx="{{pt.x}}" cy="{{pt.y}}" r="{{pt.r}}" fill="{{pt.fill}}" stroke="#3b82f6" stroke-width="1.5"></circle>
+                </sc-for>
+              </svg>
+              <!-- Numeric labels are plain HTML overlaid on top of the SVG
+                   (not SVG <text>), positioned by percentage so they always
+                   render reliably: the y-axis scale on the right and each
+                   point's value/period underneath it. -->
+              <sc-for list="{{selectedStock.chartYTicks}}" as="yt" hint-placeholder-count="5">
+                <div style="position: absolute; right: 3%; width: 14%; top: {{yt.topPct}}%; transform: translateY(-50%); text-align: right; font-size: 9px; line-height: 1; color: #64748b; direction: ltr;">{{yt.label}}</div>
+              </sc-for>
+              <sc-for list="{{selectedStock.chartPoints}}" as="pt" hint-placeholder-count="8">
+                <div style="position: absolute; left: {{pt.leftPct}}%; top: {{pt.valueTopPct}}%; transform: translate(-50%, -100%); font-size: 10px; line-height: 1; color: #94a3b8; white-space: nowrap; direction: ltr;">{{pt.valueLabel}}</div>
+                <div style="position: absolute; left: {{pt.leftPct}}%; bottom: 4%; transform: translateX(-50%); font-size: 9px; line-height: 1; color: #64748b; white-space: nowrap; direction: ltr;">{{pt.period}}</div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="margin-top: 16px;">
+          <span style="display: inline-block; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 700; background: {{selectedStock.stageBg}}; color: {{selectedStock.stageColor}};">{{selectedStock.stageLabel}}</span>
+          <div style="margin-top: 6px; font-size: 13px; color: #94a3b8;">איפה המניה נמצאת מבחינה טכנית: {{selectedStock.stageNote}}</div>
+
+          <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px;">
+            <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px;">ניתוח סטייג' (שיטת Weinstein) — כל הסטייג'ים</div>
+            <sc-for list="{{selectedStock.stageLegend}}" as="sl" hint-placeholder-count="4">
+              <div style="border-radius: 6px; padding: 6px 8px; background: {{sl.bg}}; box-shadow: {{sl.ring}};">
+                <div style="font-size: 12px; font-weight: 700; color: {{sl.titleColor}};">{{sl.title}}<span style="color: #3b82f6;">{{sl.currentTag}}</span></div>
+                <div style="margin-top: 2px; font-size: 11px; color: #64748b;">{{sl.desc}}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <div style="font-size: 13px; font-weight: 700; color: #e2e8f0;">תחזיות צמיחה ומכפיל רווח עתידי</div>
+          <div style="margin-top: 6px; font-size: 12px; color: #64748b;">{{selectedStock.guidanceNote}}</div>
+
+          <div style="margin-top: 10px; overflow-x: auto;">
+            <table style="width: 100%; min-width: 520px; font-size: 13px;">
+              <thead>
+                <tr style="border-bottom: 1px solid #272b35; color: #64748b;">
+                  <th style="padding: 6px 0; text-align: right; font-weight: 500;">שנה</th>
+                  <th style="padding: 6px 0; text-align: right; font-weight: 500;">צמיחת הכנסות — אנליסטים</th>
+                  <th style="padding: 6px 0; text-align: right; font-weight: 500;">צמיחת הכנסות — תחזית החברה</th>
+                  <th style="padding: 6px 0; text-align: right; font-weight: 500;">צמיחת רווח (EPS)</th>
+                  <th style="padding: 6px 0; text-align: right; font-weight: 500;">מכפיל רווח עתידי</th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{selectedStock.forwardEstimates}}" as="fe" hint-placeholder-count="3">
+                  <tr style="border-bottom: 1px solid rgba(39,43,53,0.7);">
+                    <td style="padding: 6px 0; color: #cbd5e1;">{{fe.year}}</td>
+                    <td style="padding: 6px 0; color: #34c77b;">{{fe.analystRevGrowth}}</td>
+                    <td style="padding: 6px 0; color: #e2e8f0;">{{fe.companyRevGrowth}}</td>
+                    <td style="padding: 6px 0; color: #34c77b;">{{fe.epsGrowth}}</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #f1f5f9;">{{fe.forwardPE}}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <div style="font-size: 13px; font-weight: 700; color: #e2e8f0;">תזות וכתבות אנליסטים</div>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{selectedStock.theses}}" as="t" hint-placeholder-count="1">
+              <a href="{{t.url}}" target="_blank" style="display: block; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px; text-decoration: none;">
+                <div style="font-size: 13px; color: #e2e8f0;">{{t.title}}</div>
+                <div style="margin-top: 4px; font-size: 11px; color: #64748b;">{{t.source}} · {{t.date}} · <span style="color: {{t.stanceColor}};">{{t.stanceLabel}}</span></div>
+              </a>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <div style="font-size: 13px; font-weight: 700; color: #e2e8f0;">חדשות אחרונות</div>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{selectedStock.visibleNews}}" as="n" hint-placeholder-count="1">
+              <a href="{{n.url}}" target="_blank" style="display: block; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px; text-decoration: none;">
+                <div style="font-size: 13px; color: #e2e8f0;">{{n.title}}</div>
+                <div style="margin-top: 4px; font-size: 11px; color: #64748b;">{{n.source}} · {{n.date}}</div>
+              </a>
+            </sc-for>
+          </div>
+          <sc-if value="{{selectedStock.hasMoreNews}}" hint-placeholder-val="{{false}}">
+            <button onClick="{{selectedStock.toggleNews}}" style="margin-top: 8px; width: 100%; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 7px; font-size: 12px; color: #94a3b8;">{{selectedStock.newsToggleLabel}}</button>
+          </sc-if>
+        </div>
+
+        <div style="margin-top: 16px; font-size: 11px; color: #64748b;">המכפילים, הסטייג', התזות והחדשות שלעיל הם נתוני דמה להדגמת המסך. בשלב 3 יחוברו למקורות מידע חיים באינטרנט.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Risk management modal: mode choice (trading vs investing), then
+       either the swing-trading calculators or the portfolio scenario tool. -->
+  <sc-if value="{{riskModalOpen}}" hint-placeholder-val="{{false}}">
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 50;">
+      <div style="width: 100%; max-width: 560px; max-height: 85vh; overflow-y: auto; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;">
+          <div style="font-size: 18px; font-weight: 700; color: #f1f5f9;">ניהול סיכונים</div>
+          <button onClick="{{closeRiskModal}}" aria-label="סגור" style="background: none; border: none; color: #64748b; font-size: 18px; line-height: 1;">✕</button>
+        </div>
+
+        <sc-if value="{{riskModeIsNull}}" hint-placeholder-val="{{true}}">
+          <div style="margin-top: 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+            <button onClick="{{pickTradingMode}}" style="text-align: right; background: #1e222b; border: 1px solid #272b35; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(59,130,246,0.15); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 18px;">📈</span>
+              <span style="font-size: 15px; font-weight: 700; color: #f1f5f9;">מסחר (סווינג)</span>
+              <span style="font-size: 12px; color: #94a3b8; line-height: 1.5;">ניהול סיכונים לעסקה בודדת: כמה כסף ואיזה אחוז מהתיק בסיכון לפי הסטופ-לוס שבחרתם, ויחס סיכון/סיכוי מול מחיר יעד.</span>
+            </button>
+            <button onClick="{{pickInvestingMode}}" style="text-align: right; background: #1e222b; border: 1px solid #272b35; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 8px;">
+              <span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(59,130,246,0.15); color: #60a5fa; display: flex; align-items: center; justify-content: center; font-size: 18px;">🛡️</span>
+              <span style="font-size: 15px; font-weight: 700; color: #f1f5f9;">השקעות</span>
+              <span style="font-size: 12px; color: #94a3b8; line-height: 1.5;">ניהול סיכונים ברמת התיק: בטא, תנודתיות ו-VaR, ריכוזיות והחשיפה הסקטוריאלית הגדולה, תרחיש למניה בודדת, ותרחישי שוק מוכנים לפי הבטא של התיק.</span>
+            </button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{riskModeIsTrading}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{backToRiskModeChoice}}" style="margin-top: 16px; background: none; border: none; color: #94a3b8; font-size: 12px; font-weight: 600;">→ חזרה לבחירת סוג ניהול סיכונים</button>
+
+          <div style="margin-top: 12px; display: flex; gap: 8px; border-bottom: 1px solid #272b35; padding-bottom: 12px;">
+            <button onClick="{{pickTradeRiskTab}}" style="border: none; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; background: {{tradeRiskTabBg}}; color: {{tradeRiskTabColor}};">סיכון לעסקה</button>
+            <button onClick="{{pickRiskRewardTab}}" style="border: none; border-radius: 999px; padding: 6px 14px; font-size: 12px; font-weight: 600; background: {{riskRewardTabBg}}; color: {{riskRewardTabColor}};">סיכון/סיכוי</button>
+          </div>
+
+          <sc-if value="{{riskTradingTabIsTradeRisk}}" hint-placeholder-val="{{true}}">
+            <div style="margin-top: 14px;">
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">נייר (מהתיק שלכם)</div>
+              <select value="{{trTicker}}" onChange="{{onTrTicker}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;">
+                <sc-for list="{{trHoldings}}" as="h" hint-placeholder-count="6">
+                  <option value="{{h.ticker}}">{{h.label}}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">מחיר נוכחי</div>
+                <div style="background: #14161c; border: 1px solid #272b35; color: #94a3b8; border-radius: 8px; padding: 8px 10px; font-size: 13px;">{{trEntryPriceLabel}}</div>
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">גודל תיק ($)</div>
+                <input type="number" value="{{trAccountSize}}" onChange="{{onTrAccountSize}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">כמות מניות</div>
+                <input type="number" value="{{trQuantity}}" onChange="{{onTrQuantity}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">מחיר סטופ-לוס</div>
+                <input type="number" value="{{trStop}}" onChange="{{onTrStop}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+            </div>
+            <button onClick="{{calcTr}}" style="margin-top: 12px; width: 100%; background: #3b82f6; color: #ffffff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 700;">חשב סיכון לעסקה</button>
+            <sc-if value="{{hasTrResult}}" hint-placeholder-val="{{false}}">
+              <div style="margin-top: 12px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">סכום בסיכון (לפי הסטופ)</span><span style="font-size: 15px; font-weight: 800; color: #60a5fa;">{{trResult.riskAmount}}</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">אחוז סיכון מהתיק</span><span style="font-size: 15px; font-weight: 800; color: #60a5fa;">{{trResult.riskPctOfAccount}}</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שווי הפוזיציה</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{trResult.positionValue}}</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">חשיפה מהתיק</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{trResult.accountExposurePct}}</span></div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{riskTradingTabIsRiskReward}}" hint-placeholder-val="{{false}}">
+            <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">מחיר כניסה</div>
+                <input type="number" value="{{rrEntry}}" onChange="{{onRrEntry}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">מחיר סטופ-לוס</div>
+                <input type="number" value="{{rrStop}}" onChange="{{onRrStop}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+              <div>
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">מחיר יעד</div>
+                <input type="number" value="{{rrTarget}}" onChange="{{onRrTarget}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+              </div>
+            </div>
+            <button onClick="{{calcRr}}" style="margin-top: 12px; width: 100%; background: #3b82f6; color: #ffffff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 700;">חשב יחס סיכון/סיכוי</button>
+            <sc-if value="{{hasRrResult}}" hint-placeholder-val="{{false}}">
+              <div style="margin-top: 12px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">יחס סיכון/סיכוי</span><span style="font-size: 15px; font-weight: 800; color: #60a5fa;">{{rrResult.ratio}}</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">סיכון למניה</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{rrResult.risk}}</span></div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">סיכוי למניה</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{rrResult.reward}}</span></div>
+              </div>
+            </sc-if>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{riskModeIsInvesting}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{backToRiskModeChoice}}" style="margin-top: 16px; background: none; border: none; color: #94a3b8; font-size: 12px; font-weight: 600;">→ חזרה לבחירת סוג ניהול סיכונים</button>
+
+          <div style="margin-top: 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b;">תמונת סיכון כללית (מחושב אוטומטית מהתיק)</div>
+          <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+            <div style="background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 11px; color: #94a3b8;">בטא של התיק</div>
+              <div style="margin-top: 4px; font-size: 16px; font-weight: 800; color: #f1f5f9;">{{portfolioBetaLabel}}</div>
+              <div style="margin-top: 2px; font-size: 10px; color: #64748b;">{{portfolioBetaNote}}</div>
+            </div>
+            <div style="background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 11px; color: #94a3b8;">תנודתיות שנתית משוערת</div>
+              <div style="margin-top: 4px; font-size: 16px; font-weight: 800; color: #f1f5f9;">{{annualVolLabel}}</div>
+              <div style="margin-top: 2px; font-size: 10px; color: #64748b;">הערכה בלבד</div>
+            </div>
+            <div style="background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 10px; text-align: center;">
+              <div style="font-size: 11px; color: #94a3b8;">VaR יומי (95%)</div>
+              <div style="margin-top: 4px; font-size: 16px; font-weight: 800; color: #f0576a;">{{varUsdLabel}}</div>
+              <div style="margin-top: 2px; font-size: 10px; color: #64748b;">{{varPctLabel}}</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b;">ריכוזיות התיק</div>
+          <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+            <sc-for list="{{concentrationRows}}" as="row" hint-placeholder-count="6">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 64px; flex-shrink: 0; font-size: 11px; font-weight: 600; color: #cbd5e1;">{{row.ticker}}</span>
+                <div style="flex: 1; height: 8px; border-radius: 999px; background: #1e222b; overflow: hidden;">
+                  <div style="height: 100%; border-radius: 999px; background: {{row.barColor}}; width: {{row.barWidth}};"></div>
+                </div>
+                <span style="width: 44px; flex-shrink: 0; text-align: left; font-size: 11px; font-weight: 700; color: #cbd5e1;">{{row.weightLabel}}</span>
+              </div>
+            </sc-for>
+          </div>
+          <sc-if value="{{hasTopSector}}" hint-placeholder-val="{{false}}">
+            <div style="margin-top: 8px; font-size: 11px; color: #94a3b8; line-height: 1.6;">החשיפה הסקטוריאלית הגדולה ביותר: <span style="font-weight: 700; color: #e2e8f0;">{{topSectorName}}</span> — {{topSectorPctLabel}} מהתיק</div>
+          </sc-if>
+
+          <div style="margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b;">תרחיש למניה בודדת</div>
+          <div style="margin-top: 8px; font-size: 12px; color: #94a3b8; line-height: 1.6;">בחרו אחזקה בתיק ותרחיש שינוי מחיר, ותראו את ההשפעה לא רק על האחזקה עצמה — אלא על שווי התיק כולו.</div>
+
+          <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+            <div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">נייר בתיק</div>
+              <select value="{{scenarioTicker}}" onChange="{{onScenarioTicker}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;">
+                <sc-for list="{{scenarioHoldings}}" as="h" hint-placeholder-count="6">
+                  <option value="{{h.ticker}}">{{h.label}}</option>
+                </sc-for>
+              </select>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">שינוי מחיר צפוי (%)</div>
+              <input type="number" value="{{scenarioChangePct}}" onChange="{{onScenarioChangePct}}" style="width: 100%; box-sizing: border-box; background: #1e222b; border: 1px solid #272b35; color: #e2e8f0; border-radius: 8px; padding: 8px 10px; font-size: 13px;" />
+            </div>
+          </div>
+
+          <button onClick="{{calcScenario}}" style="margin-top: 12px; width: 100%; background: #3b82f6; color: #ffffff; border: none; border-radius: 10px; padding: 10px; font-size: 13px; font-weight: 700;">חשב השפעה על התיק</button>
+
+          <sc-if value="{{hasScenarioResult}}" hint-placeholder-val="{{false}}">
+            <div style="margin-top: 12px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שינוי בשווי התיק הכולל</span><span style="font-size: 15px; font-weight: 800; color: #60a5fa;">{{scenarioResult.portfolioChangePct}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">מחיר תרחיש</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{scenarioResult.scenarioPrice}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שינוי בשווי האחזקה</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{scenarioResult.posChange}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שווי תיק לפני</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{scenarioResult.portfolioBefore}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שווי תיק אחרי התרחיש</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{scenarioResult.portfolioAfter}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">משקל האחזקה (לפני → אחרי)</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{scenarioResult.weightBefore}} → {{scenarioResult.weightAfter}}</span></div>
+            </div>
+          </sc-if>
+
+          <div style="margin-top: 16px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b;">תרחישי שוק מוכנים</div>
+          <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;">
+            <sc-for list="{{stressButtons}}" as="btn" hint-placeholder-count="4">
+              <button onClick="{{btn.pick}}" style="border: none; border-radius: 8px; padding: 8px 4px; text-align: center; background: {{btn.bg}}; color: {{btn.color}};">
+                <div style="font-size: 11px; font-weight: 700;">{{btn.label}}</div>
+                <div style="margin-top: 2px; font-size: 10px; opacity: 0.8;">{{btn.marketMoveLabel}}</div>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{hasStressResult}}" hint-placeholder-val="{{false}}">
+            <div style="margin-top: 10px; background: #1e222b; border: 1px solid #272b35; border-radius: 8px; padding: 12px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שינוי משוער בתיק (בטא {{stressResult.betaLabel}})</span><span style="font-size: 15px; font-weight: 800; color: #f0576a;">{{stressResult.movePct}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">הפסד משוער</span><span style="font-size: 13px; font-weight: 600; color: #f0576a;">{{stressResult.lossUsd}}</span></div>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 4px 0;"><span style="font-size: 12px; color: #94a3b8;">שווי תיק אחרי התרחיש</span><span style="font-size: 13px; font-weight: 600; color: #e2e8f0;">{{stressResult.newValue}}</span></div>
+            </div>
+          </sc-if>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Legal disclaimer + portfolio-setup gate, shown once when the page loads. -->
+  <sc-if value="{{showDisclaimer}}" hint-placeholder-val="{{true}}">
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 60;">
+      <div style="width: 100%; max-width: 560px; background: #171a21; border: 1px solid #272b35; border-radius: 14px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.4);">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="width: 40px; height: 40px; border-radius: 10px; background: rgba(217,119,6,0.15); color: #fbbf24; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0;">⚠️</span>
+          <div style="font-size: 17px; font-weight: 700; color: #f1f5f9;">כתב ויתור והבהרה משפטית</div>
+        </div>
+        <div style="margin-top: 14px; font-size: 13px; line-height: 1.7; color: #94a3b8;">התוכן, הכלים והנתונים באפליקציה זו — לרבות מחשבוני סיכון, הערכות שווי, תזות, חדשות ובריפים — מוצגים למטרות מידע והדגמה בלבד, ואינם מהווים ייעוץ השקעות, המלצה לביצוע עסקה, או תחליף לייעוץ מקצועי מותאם אישית. חלק מהנתונים המוצגים כרגע הם נתוני דמה (Mock) לצורך בניית הממשק וטרם חוברו למקורות מידע חיים. כל החלטת השקעה היא באחריותכם הבלעדית, ומומלץ להיוועץ ביועץ/ת השקעות מוסמך/ת לפני קבלת החלטות פיננסיות.</div>
+        <div style="margin-top: 14px; background: #1e222b; border: 1px solid #272b35; border-radius: 10px; padding: 14px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: #60a5fa; font-size: 14px;">💼</span>
+            <div style="font-size: 13px; font-weight: 700; color: #e2e8f0;">בניית תיק ההשקעות האישי שלך</div>
+          </div>
+          <div style="margin-top: 6px; font-size: 12px; line-height: 1.6; color: #64748b;">כדי שהכלים באפליקציה — ניהול סיכונים, בדיקות תרחיש, הערכות שווי ומעקב ביצועים — יתאימו את עצמם באמת למצבכם, מומלץ להזין את תיק ההשקעות האמיתי שלכם. אפשר גם לדלג על השלב הזה עכשיו ולחזור אליו בכל שלב מאוחר יותר.</div>
+        </div>
+        <div style="margin-top: 18px; display: flex; gap: 8px;">
+          <button onClick="{{onBuildPortfolio}}" style="flex: 1; background: #3b82f6; color: #ffffff; border: none; border-radius: 10px; padding: 11px; font-size: 13px; font-weight: 700;">בניית תיק ההשקעות שלי</button>
+          <button onClick="{{onSkipDisclaimer}}" style="flex: 1; background: none; border: 1px solid #272b35; color: #cbd5e1; border-radius: 10px; padding: 11px; font-size: 13px; font-weight: 700;">דלג לעת עתה</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1700}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      modalOpen: false, modalTitle: '', stockModalOpen: false, selectedTicker: null, benchmarkId: 'sp500', indexPeriod: 'daily', indexCategory: 'main', searchQuery: '', searchNotFound: false, activeMetric: null, newsExpanded: false,
+      riskModalOpen: false, riskMode: null, riskTradingTab: 'trade-risk',
+      trTicker: 'NVDA', trAccountSize: '250000', trQuantity: '120', trStop: '', trResult: null,
+      rrEntry: '', rrStop: '', rrTarget: '', rrResult: null,
+      scenarioTicker: 'NVDA', scenarioChangePct: '-10', scenarioResult: null,
+      stressActiveId: null,
+      showDisclaimer: true
+    };
+
+    this.stageDescriptions = {
+      1: { title: "סטייג' 1 — תהליך בסיס (Basing)", desc: 'המניה יוצאת ממגמת ירידה ונסחרת בטווח אופקי, ללא כיוון ברור. הממוצעים הנעים משתטחים ונפח המסחר נמוך יחסית.' },
+      2: { title: "סטייג' 2 — מגמת עלייה (Advancing)", desc: 'המניה פורצת מעלה מהבסיס, נסחרת מעל הממוצעים הנעים העולים, עם נפח קונים תומך. זהו שלב הקנייה המועדף בשיטה.' },
+      3: { title: "סטייג' 3 — תהליך גג (Topping)", desc: 'המגמה העולה מאבדת תאוצה, המניה נסחרת בטווח לאחר עלייה ממושכת, והתנודתיות עולה — סימן אזהרה לפני היפוך מגמה.' },
+      4: { title: "סטייג' 4 — מגמת ירידה (Declining)", desc: 'המניה שוברת תמיכות ונסחרת מתחת לממוצעים הנעים היורדים. שלב זה נחשב למסוכן ביותר להחזקה לפי השיטה.' }
+    };
+
+    this.holdingsData = [
+      { ticker: 'NVDA', name: 'אנבידיה', qty: 120, avgCost: 92.3, price: 178.4, weight: '22.1%', sector: 'מוליכים למחצה',
+        pe: 48.2, evEbitda: 34.5, ps: 22.1, roi: 38.4, roe: 91.5, roa: 55.2, marketCap: '$4.35T',
+        avg: { pe: 29.6, evEbitda: 19.8, ps: 8.4, roi: 18.7, roe: 24.3, roa: 12.1 },
+        growth: { note: 'החברה צופה המשך ביקוש חזק לצ׳יפים לאימון AI ברבעונים הקרובים',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 42.5, companyRev: 45.0, eps: 38.9, pe: 34.7 }, { year: 'בעוד שנתיים (FY28)', analystRev: 24.1, companyRev: 25.5, eps: 26.4, pe: 27.5 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 16.8, companyRev: 17.8, eps: 19.2, pe: 23.1 } ] },
+        stage: 2, stageNote: 'מעל הממוצע הנע 30 שבועי, עם נפח קונים תומך',
+        theses: [{ title: 'המשך מומנטום בביקוש לצ׳יפים לאימון AI', url: 'https://example.com/nvda-thesis-1', source: 'Seeking Alpha', date: 'לפני 3 ימים', stance: 'bullish' }],
+        news: [
+          { title: 'אנבידיה מכריזה על שבב דור הבא לאימון מודלים גדולים', url: 'https://example.com/nvda-news-1', source: 'Reuters', date: 'היום' },
+          { title: 'אנבידיה מרחיבה שת"פ עם ספקיות ענן מובילות', url: 'https://example.com/nvda-news-2', source: 'Bloomberg', date: 'אתמול' },
+          { title: 'ביקוש לשבבי AI ממשיך לעלות על ההיצע ברבעון הנוכחי', url: 'https://example.com/nvda-news-3', source: 'CNBC', date: 'לפני יומיים' },
+          { title: 'אנליסטים מעלים מחיר יעד לאנבידיה לקראת הדוחות', url: 'https://example.com/nvda-news-4', source: 'Barron\'s', date: 'לפני 3 ימים' }
+        ] },
+      { ticker: 'MSFT', name: 'מיקרוסופט', qty: 60, avgCost: 310.1, price: 428.9, weight: '17.8%', sector: 'תוכנה ושירותי ענן',
+        pe: 36.8, evEbitda: 24.3, ps: 13.4, roi: 24.6, roe: 34.2, roa: 18.9, marketCap: '$3.19T',
+        avg: { pe: 31.2, evEbitda: 20.5, ps: 9.1, roi: 19.8, roe: 27.6, roa: 13.4 },
+        growth: { note: 'ההנהלה צופה המשך צמיחה דו-ספרתית ב-Azure ובענן הארגוני',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 14.2, companyRev: 15.0, eps: 15.8, pe: 31.8 }, { year: 'בעוד שנתיים (FY28)', analystRev: 12.6, companyRev: 13.3, eps: 14.1, pe: 27.9 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 11.4, companyRev: 12.0, eps: 13.0, pe: 24.7 } ] },
+        stage: 2, stageNote: 'טרנד יציב עם תיקונים רדודים',
+        theses: [{ title: 'Azure ממשיכה להוביל צמיחה; שולי הענן משתפרים', url: 'https://example.com/msft-thesis-1', source: "Barron's", date: 'לפני 4 ימים', stance: 'bullish' }],
+        news: [
+          { title: 'מיקרוסופט מרחיבה שת"פ AI ארגוני', url: 'https://example.com/msft-news-1', source: 'CNBC', date: 'היום' },
+          { title: 'Azure מדווחת על צמיחה דו-ספרתית ברבעון האחרון', url: 'https://example.com/msft-news-2', source: 'Reuters', date: 'לפני יומיים' }
+        ] },
+      { ticker: 'TSM', name: 'טאיוואן סמיקונדקטור', qty: 150, avgCost: 95.0, price: 172.2, weight: '15.4%', sector: 'מוליכים למחצה',
+        pe: 27.4, evEbitda: 15.8, ps: 9.7, roi: 21.3, roe: 29.8, roa: 16.5, marketCap: '$895B',
+        avg: { pe: 29.6, evEbitda: 19.8, ps: 8.4, roi: 18.7, roe: 24.3, roa: 12.1 },
+        growth: { note: 'החברה מנחה לצמיחה עקבית בהובלת ביקוש לתהליכי ייצור מתקדמים',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 19.4, companyRev: 21.0, eps: 20.5, pe: 22.8 }, { year: 'בעוד שנתיים (FY28)', analystRev: 15.2, companyRev: 16.5, eps: 16.7, pe: 19.5 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 12.8, companyRev: 13.9, eps: 14.0, pe: 17.1 } ] },
+        stage: 3, stageNote: 'מתקרבת לתמיכה מרכזית, נדרש אישור נפח',
+        theses: [{ title: 'סיכון גיאופוליטי מוסיף פרמיית סיכון קצרת טווח', url: 'https://example.com/tsm-thesis-1', source: 'JPMorgan', date: 'לפני יומיים', stance: 'bearish' }],
+        news: [
+          { title: 'טאיוואן סמיקונדקטור מדווחת על עלייה בתפוסת המפעל', url: 'https://example.com/tsm-news-1', source: 'Nikkei', date: 'לפני יומיים' },
+          { title: 'החברה מציגה מפת דרכים לתהליך ייצור מתקדם יותר', url: 'https://example.com/tsm-news-2', source: 'Reuters', date: 'לפני 4 ימים' }
+        ] },
+      { ticker: 'VRT', name: 'וורטיב הולדינגס', qty: 300, avgCost: 45.6, price: 98.7, weight: '9.6%', sector: 'תשתיות דאטה-סנטר',
+        pe: 41.5, evEbitda: 26.9, ps: 6.8, roi: 19.7, roe: 33.1, roa: 11.8, marketCap: '$62B',
+        avg: { pe: 25.1, evEbitda: 16.4, ps: 3.9, roi: 14.2, roe: 21.5, roa: 8.6 },
+        growth: { note: 'החברה מנחה לגידול דו-ספרתי בהזמנות פתרונות קירור והזנת חשמל',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 17.6, companyRev: 16.0, eps: 22.3, pe: 33.9 }, { year: 'בעוד שנתיים (FY28)', analystRev: 14.8, companyRev: 13.5, eps: 18.1, pe: 28.7 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 12.1, companyRev: 11.0, eps: 15.0, pe: 25.0 } ] },
+        stage: 2, stageNote: 'פריצת שיא חדש בנפח גבוה',
+        theses: [{ title: 'ביקוש לפתרונות קירור דאטה-סנטר ממשיך להפתיע', url: 'https://example.com/vrt-thesis-1', source: 'Wolfe Research', date: 'לפני 5 ימים', stance: 'bullish' }],
+        news: [{ title: 'וורטיב מרחיבה קיבולת ייצור לפתרונות הזנת חשמל', url: 'https://example.com/vrt-news-1', source: 'Reuters', date: 'לפני 3 ימים' }] },
+      { ticker: 'TEVA.TA', name: 'טבע', qty: 800, avgCost: 38.2, price: 51.6, weight: '6.2%', sector: 'תרופות גנריות',
+        pe: 14.2, evEbitda: 7.1, ps: 1.6, roi: 8.9, roe: 13.4, roa: 4.2, marketCap: '$22.5B',
+        avg: { pe: 17.8, evEbitda: 10.3, ps: 2.9, roi: 11.6, roe: 16.9, roa: 6.1 },
+        growth: { note: 'החברה מנחה לצמיחה מתונה תוך המשך הפחתת המינוף',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 4.8, companyRev: 4.0, eps: 9.6, pe: 12.7 }, { year: 'בעוד שנתיים (FY28)', analystRev: 4.1, companyRev: 3.4, eps: 8.2, pe: 11.6 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 3.6, companyRev: 3.0, eps: 7.0, pe: 10.8 } ] },
+        stage: 2, stageNote: 'יציאה מבסיס ארוך טווח',
+        theses: [{ title: 'טבע ממשיכה בתהליך הפחתת המינוף', url: 'https://example.com/teva-thesis-1', source: 'כלכליסט', date: 'לפני שבוע', stance: 'bullish' }],
+        news: [{ title: 'טבע מדווחת על התקדמות בצנרת התרופות הביוסימילריות', url: 'https://example.com/teva-news-1', source: 'גלובס', date: 'היום' }] },
+      { ticker: 'POLI.TA', name: 'בנק הפועלים', qty: 400, avgCost: 29.4, price: 41.8, weight: '4.9%', sector: 'בנקאות ישראלית',
+        pe: 8.1, evEbitda: 6.4, ps: 3.2, roi: 13.8, roe: 17.2, roa: 1.4, marketCap: '$17.8B',
+        avg: { pe: 7.6, evEbitda: 6.0, ps: 2.8, roi: 12.1, roe: 15.4, roa: 1.1 },
+        growth: { note: 'ההנהלה צופה המשך יציבות בהכנסות המימון תוך צמיחה בעמלות',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 6.2, companyRev: 5.5, eps: 7.4, pe: 7.5 }, { year: 'בעוד שנתיים (FY28)', analystRev: 5.6, companyRev: 5.0, eps: 6.8, pe: 7.0 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 5.1, companyRev: 4.5, eps: 6.1, pe: 6.6 } ] },
+        stage: 2, stageNote: 'תשואה על ההון גבוהה מהממוצע הסקטוריאלי',
+        theses: [{ title: 'הבנקים הישראלים נסחרים בדיסקאונט למרות רווחיות שיא', url: 'https://example.com/poli-thesis-1', source: 'כלכליסט', date: 'לפני 4 ימים', stance: 'bullish' }],
+        news: [{ title: 'בנק הפועלים מכריז על תוכנית רכישה עצמית מוגדלת', url: 'https://example.com/poli-news-1', source: 'TheMarker', date: 'אתמול' }] },
+      { ticker: 'AAPL', name: 'אפל', qty: 0, avgCost: 0, price: 0, weight: '', sector: 'מוצרי טכנולוגיה צרכניים', searchOnly: true,
+        pe: 33.1, evEbitda: 24.6, ps: 9.2, roi: 29.8, roe: 152.3, roa: 27.1, marketCap: '$3.62T',
+        avg: { pe: 27.4, evEbitda: 18.9, ps: 6.1, roi: 20.5, roe: 38.7, roa: 15.2 },
+        growth: { note: 'החברה צופה צמיחה חד-ספרתית גבוהה בהובלת שירותים ואייפון',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 8.4, companyRev: 7.5, eps: 11.2, pe: 29.8 }, { year: 'בעוד שנתיים (FY28)', analystRev: 7.6, companyRev: 6.8, eps: 9.8, pe: 27.1 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 6.9, companyRev: 6.2, eps: 8.9, pe: 24.9 } ] },
+        stage: 2, stageNote: 'מסחר יציב סביב שיאים עם נפח בינוני',
+        theses: [{ title: 'מחזור שדרוגי אייפון עם AI צפוי לתמוך בהכנסות שירותים', url: 'https://example.com/aapl-thesis-1', source: 'Wedbush', date: 'לפני יומיים', stance: 'bullish' }],
+        news: [{ title: 'אפל מרחיבה פיצ׳רי בינה מלאכותית במערכת ההפעלה', url: 'https://example.com/aapl-news-1', source: 'Bloomberg', date: 'היום' }] },
+      { ticker: 'TSLA', name: 'טסלה', qty: 0, avgCost: 0, price: 0, weight: '', sector: 'רכב חשמלי ואנרגיה', searchOnly: true,
+        pe: 68.4, evEbitda: 41.2, ps: 10.8, roi: 9.6, roe: 12.8, roa: 6.1, marketCap: '$1.08T',
+        avg: { pe: 22.3, evEbitda: 14.6, ps: 1.9, roi: 11.4, roe: 15.9, roa: 6.8 },
+        growth: { note: 'החברה מנחה לצמיחה מואצת לקראת השקת רכב אוטונומי ורובוטיקה',
+          forward: [ { year: 'שנה הבאה (FY27)', analystRev: 15.8, companyRev: 20.0, eps: 28.4, pe: 53.3 }, { year: 'בעוד שנתיים (FY28)', analystRev: 18.9, companyRev: 23.9, eps: 31.7, pe: 40.5 }, { year: 'בעוד 3 שנים (FY29)', analystRev: 21.4, companyRev: 27.1, eps: 29.1, pe: 31.4 } ] },
+        stage: 3, stageNote: 'תנודתיות גבוהה סביב תמיכה מרכזית',
+        theses: [{ title: 'פוטנציאל הנהיגה האוטונומית עדיין אינו מגולם במחיר', url: 'https://example.com/tsla-thesis-1', source: 'ARK Invest', date: 'לפני שבוע', stance: 'bullish' }],
+        news: [{ title: 'טסלה מעדכנת לוח זמנים להשקת שירות רובוטקסי', url: 'https://example.com/tsla-news-1', source: 'Reuters', date: 'לפני יומיים' }] }
+    ];
+
+    this.indexPeriodOptions = [
+      { id: 'daily', label: 'יומי' },
+      { id: 'weekly', label: 'שבועי' },
+      { id: 'quarterly', label: 'רבעוני' },
+      { id: 'ytd', label: 'מתחילת שנה' },
+      { id: 'yearly', label: 'שנתי' },
+      { id: '5y', label: '5 שנים' }
+    ];
+
+    this.benchmarks = [
+      { id: 'sp500', label: 'S&P 500', returns: { weekly: 0.9, monthly: 2.6, quarterly: 6.1, ytd: 14.8, yearly: 19.4 } },
+      { id: 'nasdaq100', label: 'Nasdaq 100', returns: { weekly: 1.1, monthly: 3.4, quarterly: 8.0, ytd: 18.2, yearly: 24.1 } },
+      { id: 'ta35', label: 'ת"א 35', returns: { weekly: 0.5, monthly: 1.9, quarterly: 4.8, ytd: 11.4, yearly: 15.7 } },
+      { id: 'ta125', label: 'ת"א 125', returns: { weekly: 0.6, monthly: 2.1, quarterly: 5.2, ytd: 12.6, yearly: 16.9 } },
+      { id: 'msci-world', label: 'MSCI World', returns: { weekly: 0.7, monthly: 2.4, quarterly: 5.9, ytd: 13.9, yearly: 18.3 } }
+    ];
+
+    this.portfolioReturns = { weekly: 1.8, monthly: 4.2, quarterly: 9.6, ytd: 21.3, yearly: 27.9 };
+    this.periodLabels = { weekly: 'שבועי', monthly: 'חודשי', quarterly: 'רבעוני', ytd: 'מתחילת שנה', yearly: 'שנתי' };
+
+    this.ilIndicesData = [
+      { label: 'ת"א 35', value: '2,148.3', returns: { daily: 0.4, weekly: 0.9, quarterly: 4.8, ytd: 11.4, yearly: 15.7, '5y': 61.2 } },
+      { label: 'ת"א 125', value: '2,384.1', returns: { daily: 0.3, weekly: 0.7, quarterly: 5.2, ytd: 12.6, yearly: 16.9, '5y': 66.4 } },
+      { label: 'ת"א טק-עילית', value: '412.6', returns: { daily: 1.1, weekly: 2.0, quarterly: 8.4, ytd: 19.8, yearly: 27.3, '5y': 104.5 } }
+    ];
+    this.globalIndicesData = [
+      { label: 'S&P 500', value: '6,482.7', returns: { daily: 0.6, weekly: 0.9, quarterly: 6.1, ytd: 14.8, yearly: 19.4, '5y': 92.8 } },
+      { label: 'Nasdaq 100', value: '22,845.2', returns: { daily: 0.9, weekly: 1.1, quarterly: 8.0, ytd: 18.2, yearly: 24.1, '5y': 138.6 } },
+      { label: 'VIX', value: '14.8', returns: { daily: -2.3, weekly: -4.1, quarterly: -8.6, ytd: -12.4, yearly: -18.9, '5y': -35.2 } }
+    ];
+
+    // Sector ETFs (11 SPDR sectors + niche thematics) and the leading
+    // regional markets/ETFs in Asia and South America, for the
+    // watched-indices card's category tabs. Mock quotes for Phase 1/2.
+    this.sectorIndicesData = [
+      { label: 'XLK — טכנולוגיה', value: '254.1', returns: { daily: 1.0, weekly: 1.8, quarterly: 9.4, ytd: 22.6, yearly: 29.8, '5y': 168.3 } },
+      { label: 'XLF — פיננסים', value: '52.4', returns: { daily: 0.3, weekly: 0.6, quarterly: 5.1, ytd: 13.2, yearly: 18.6, '5y': 78.4 } },
+      { label: 'XLV — בריאות', value: '148.7', returns: { daily: -0.2, weekly: -0.4, quarterly: 1.8, ytd: 4.6, yearly: 6.1, '5y': 42.7 } },
+      { label: 'XLE — אנרגיה', value: '96.3', returns: { daily: 0.5, weekly: 1.1, quarterly: 3.4, ytd: 8.9, yearly: 11.2, '5y': 89.6 } },
+      { label: 'XLI — תעשייה', value: '142.8', returns: { daily: 0.4, weekly: 0.9, quarterly: 6.2, ytd: 15.4, yearly: 20.3, '5y': 96.1 } },
+      { label: 'XLY — צריכה מחזורית', value: '231.5', returns: { daily: 0.7, weekly: 1.4, quarterly: 7.8, ytd: 17.9, yearly: 23.4, '5y': 112.8 } },
+      { label: 'XLP — צריכה בסיסית', value: '78.9', returns: { daily: -0.1, weekly: 0.1, quarterly: 1.2, ytd: 3.8, yearly: 5.4, '5y': 34.2 } },
+      { label: 'XLU — שירותים ציבוריים', value: '84.2', returns: { daily: 0.2, weekly: 0.5, quarterly: 4.1, ytd: 12.7, yearly: 16.8, '5y': 51.3 } },
+      { label: 'XLB — חומרי גלם', value: '91.6', returns: { daily: 0.3, weekly: 0.6, quarterly: 3.7, ytd: 9.1, yearly: 12.4, '5y': 47.9 } },
+      { label: 'XLRE — נדל"ן', value: '43.1', returns: { daily: 0.1, weekly: 0.3, quarterly: 2.4, ytd: 6.8, yearly: 9.7, '5y': 29.6 } },
+      { label: 'XLC — תקשורת', value: '112.4', returns: { daily: 0.8, weekly: 1.5, quarterly: 8.6, ytd: 20.3, yearly: 27.1, '5y': 134.5 } },
+      { label: 'IGV — תוכנה (נישה)', value: '96.8', returns: { daily: 1.2, weekly: 2.1, quarterly: 10.6, ytd: 24.8, yearly: 31.5, '5y': 142.9 } },
+      { label: 'CIBR — סייבר (נישה)', value: '68.3', returns: { daily: 1.1, weekly: 2.4, quarterly: 11.9, ytd: 26.3, yearly: 33.7, '5y': 121.4 } },
+      { label: 'SOXX — מוליכים למחצה (נישה)', value: '254.6', returns: { daily: 1.6, weekly: 3.2, quarterly: 14.8, ytd: 32.1, yearly: 41.6, '5y': 231.7 } },
+      { label: 'AIQ — בינה מלאכותית (נישה)', value: '42.9', returns: { daily: 1.8, weekly: 3.6, quarterly: 16.4, ytd: 35.9, yearly: 47.2, '5y': 189.3 } },
+      { label: 'DRAM — שבבי זיכרון (נישה)', value: '31.4', returns: { daily: 2.1, weekly: 4.3, quarterly: 19.7, ytd: 41.2, yearly: 55.8, '5y': 176.4 } }
+    ];
+    this.asiaIndicesData = [
+      { label: 'INDA — הודו', value: '58.7', returns: { daily: 0.4, weekly: 1.0, quarterly: 5.6, ytd: 13.8, yearly: 17.9, '5y': 74.2 } },
+      { label: 'ניקיי 225 — יפן', value: '41,284.6', returns: { daily: 0.6, weekly: 1.2, quarterly: 6.9, ytd: 16.4, yearly: 21.8, '5y': 88.6 } },
+      { label: 'KOSPI — קוריאה', value: '3,128.4', returns: { daily: 0.9, weekly: 1.8, quarterly: 9.2, ytd: 21.7, yearly: 28.4, '5y': 96.3 } },
+      { label: 'EEM — שווקים מתעוררים', value: '47.6', returns: { daily: 0.3, weekly: 0.7, quarterly: 4.9, ytd: 12.1, yearly: 15.6, '5y': 46.8 } },
+      { label: 'FXI — סין', value: '33.2', returns: { daily: 0.5, weekly: 1.4, quarterly: 6.1, ytd: 14.9, yearly: 18.3, '5y': 12.4 } },
+      { label: 'EWT — טאיוואן', value: '61.9', returns: { daily: 1.0, weekly: 2.0, quarterly: 10.4, ytd: 23.6, yearly: 30.1, '5y': 118.7 } },
+      { label: 'האנג סנג — הונג קונג', value: '21,384.2', returns: { daily: 0.4, weekly: 1.1, quarterly: 5.8, ytd: 15.2, yearly: 19.4, '5y': 8.9 } },
+      { label: 'VNM — וייטנאם', value: '16.8', returns: { daily: 0.6, weekly: 1.3, quarterly: 6.7, ytd: 16.8, yearly: 22.1, '5y': 41.3 } }
+    ];
+    this.southAmericaIndicesData = [
+      { label: 'EWZ — ברזיל', value: '34.6', returns: { daily: 0.7, weekly: 1.6, quarterly: 8.3, ytd: 19.4, yearly: 24.7, '5y': 38.9 } },
+      { label: 'ECH — צ׳ילה', value: '28.9', returns: { daily: 0.4, weekly: 0.9, quarterly: 5.2, ytd: 12.6, yearly: 16.4, '5y': 22.7 } },
+      { label: 'ARGT — ארגנטינה', value: '71.3', returns: { daily: 1.4, weekly: 3.1, quarterly: 15.8, ytd: 38.6, yearly: 52.3, '5y': 187.6 } },
+      { label: 'GXG — קולומביה', value: '24.1', returns: { daily: 0.3, weekly: 0.7, quarterly: 4.6, ytd: 11.3, yearly: 14.8, '5y': 19.4 } },
+      { label: 'EPU — פרו', value: '46.8', returns: { daily: 0.5, weekly: 1.1, quarterly: 6.4, ytd: 15.9, yearly: 20.6, '5y': 31.8 } },
+      { label: 'ILF — אמריקה הלטינית (מדד רחב)', value: '26.7', returns: { daily: 0.6, weekly: 1.3, quarterly: 7.1, ytd: 17.2, yearly: 22.9, '5y': 34.6 } }
+    ];
+    this.europeIndicesData = [
+      { label: 'DAX — גרמניה', value: '19,842.6', returns: { daily: 0.5, weekly: 1.0, quarterly: 6.4, ytd: 15.8, yearly: 20.6, '5y': 79.4 } },
+      { label: 'CAC 40 — צרפת', value: '7,684.2', returns: { daily: 0.3, weekly: 0.6, quarterly: 3.9, ytd: 9.7, yearly: 12.8, '5y': 48.6 } },
+      { label: 'FTSE 100 — בריטניה', value: '8,342.7', returns: { daily: 0.2, weekly: 0.5, quarterly: 3.2, ytd: 8.1, yearly: 10.9, '5y': 39.7 } },
+      { label: 'Euro Stoxx 50 — גוש האירו', value: '4,986.3', returns: { daily: 0.4, weekly: 0.8, quarterly: 5.1, ytd: 12.4, yearly: 16.3, '5y': 61.8 } },
+      { label: 'IBEX 35 — ספרד', value: '11,824.5', returns: { daily: 0.3, weekly: 0.7, quarterly: 4.6, ytd: 13.9, yearly: 18.1, '5y': 55.2 } }
+    ];
+    this.bondsData = [
+      { label: 'אג"ח ממשלת ישראל 2 שנים', value: '3.92%', returns: { daily: 0.01, weekly: 0.03, quarterly: -0.08, ytd: -0.21, yearly: -0.34, '5y': 1.12 } },
+      { label: 'אג"ח ממשלת ישראל 10 שנים (גילון)', value: '4.68%', returns: { daily: 0.02, weekly: 0.05, quarterly: -0.12, ytd: -0.28, yearly: -0.41, '5y': 1.34 } },
+      { label: 'מק"מ 12 חודשים', value: '4.21%', returns: { daily: 0.0, weekly: 0.01, quarterly: -0.06, ytd: -0.18, yearly: -0.29, '5y': 0.87 } },
+      { label: 'אג"ח ממשלת ארה"ב 2 שנים', value: '3.58%', returns: { daily: -0.01, weekly: -0.04, quarterly: -0.15, ytd: -0.32, yearly: -0.52, '5y': 0.68 } },
+      { label: 'אג"ח ממשלת ארה"ב 10 שנים (10Y Treasury)', value: '4.24%', returns: { daily: 0.01, weekly: 0.02, quarterly: -0.09, ytd: -0.19, yearly: -0.31, '5y': 0.94 } },
+      { label: 'אג"ח ממשלת ארה"ב 30 שנה', value: '4.51%', returns: { daily: 0.02, weekly: 0.03, quarterly: -0.05, ytd: -0.11, yearly: -0.18, '5y': 0.76 } }
+    ];
+    this.commoditiesData = [
+      { label: 'זהב (Gold, $/אונקיה)', value: '2,634.50', returns: { daily: 0.4, weekly: 1.1, quarterly: 6.8, ytd: 24.3, yearly: 31.6, '5y': 98.4 } },
+      { label: 'כסף (Silver, $/אונקיה)', value: '30.85', returns: { daily: 0.6, weekly: 1.8, quarterly: 9.4, ytd: 32.7, yearly: 41.9, '5y': 112.6 } },
+      { label: 'נחושת (Copper, $/ליברה)', value: '4.62', returns: { daily: 0.3, weekly: 0.9, quarterly: 5.6, ytd: 18.2, yearly: 23.7, '5y': 67.3 } },
+      { label: 'נפט (WTI, $/חבית)', value: '71.30', returns: { daily: -0.5, weekly: -1.2, quarterly: 2.1, ytd: -6.4, yearly: -9.8, '5y': 34.6 } },
+      { label: 'גז טבעי (Henry Hub, $/MMBtu)', value: '2.85', returns: { daily: 1.4, weekly: 3.2, quarterly: -8.6, ytd: 14.7, yearly: 19.3, '5y': 22.8 } },
+      { label: 'פלטינה (Platinum, $/אונקיה)', value: '1,045.20', returns: { daily: 0.2, weekly: 0.6, quarterly: 3.4, ytd: 9.8, yearly: 12.6, '5y': 28.1 } }
+    ];
+    this.indexCategoryOptions = [
+      { id: 'main', label: 'ישראל וארה"ב' },
+      { id: 'sectors', label: 'סקטורים' },
+      { id: 'asia', label: 'אסיה' },
+      { id: 'south-america', label: 'דרום אמריקה' },
+      { id: 'europe', label: 'אירופה' },
+      { id: 'bonds', label: 'אג"ח' },
+      { id: 'commodities', label: 'סחורות' }
+    ];
+
+    this.stanceLabels = { bullish: { label: 'חיובי', color: '#34c77b' }, bearish: { label: 'שלילי', color: '#f0576a' }, neutral: { label: 'ניטרלי', color: '#94a3b8' } };
+
+    // Simplified hedge-fund-style portfolio risk assumptions (Phase 1/2 mock data;
+    // a live feed would replace beta/volatility with real historical figures).
+    this.betaByTicker = { NVDA: 1.75, MSFT: 0.92, TSM: 1.15, VRT: 1.55, 'TEVA.TA': 0.55, 'POLI.TA': 0.75 };
+    this.ASSUMED_MARKET_ANNUAL_VOL_PCT = 16;
+    this.Z_SCORE_95 = 1.645;
+    this.TRADING_DAYS_PER_YEAR = 252;
+  }
+
+  makeButton(label, desc, emoji) {
+    return {
+      label,
+      desc,
+      emoji,
+      pick: () => this.setState({ modalOpen: true, modalTitle: label })
+    };
+  }
+
+  formatPct(value) {
+    const sign = value > 0 ? '+' : '';
+    return sign + value.toFixed(1) + '%';
+  }
+
+  calcPositionSize(accountSize, riskPct, entry, stop) {
+    const riskAmount = accountSize * (riskPct / 100);
+    const riskPerShare = Math.abs(entry - stop);
+    if (!riskPerShare) return null;
+    const shares = riskAmount / riskPerShare;
+    const positionValue = shares * entry;
+    return {
+      shares: shares.toFixed(1),
+      riskAmount: '$' + riskAmount.toFixed(0),
+      positionValue: '$' + positionValue.toFixed(0),
+      exposurePct: ((positionValue / accountSize) * 100).toFixed(1) + '%'
+    };
+  }
+
+  calcRiskReward(entry, stop, target) {
+    const risk = Math.abs(entry - stop);
+    const reward = Math.abs(target - entry);
+    if (!risk) return null;
+    return {
+      ratio: '1 : ' + (reward / risk).toFixed(2),
+      risk: '$' + risk.toFixed(2),
+      reward: '$' + reward.toFixed(2)
+    };
+  }
+
+  calcPortfolioScenario(ticker, changePct) {
+    const holding = this.holdingsData.find((h) => h.ticker === ticker && !h.searchOnly);
+    if (!holding) return null;
+    const portfolioBefore = this.holdingsData.filter((h) => !h.searchOnly).reduce((sum, h) => sum + h.qty * h.price, 0);
+    const scenarioPrice = holding.price * (1 + changePct / 100);
+    const posBefore = holding.qty * holding.price;
+    const posAfter = holding.qty * scenarioPrice;
+    const posChange = posAfter - posBefore;
+    const portfolioAfter = portfolioBefore + posChange;
+    return {
+      scenarioPrice: '$' + scenarioPrice.toFixed(2),
+      posChange: (posChange >= 0 ? '+' : '') + '$' + posChange.toFixed(0),
+      portfolioChangePct: this.formatPct((posChange / portfolioBefore) * 100),
+      portfolioBefore: '$' + portfolioBefore.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
+      portfolioAfter: '$' + portfolioAfter.toLocaleString('he-IL', { maximumFractionDigits: 0 }),
+      weightBefore: ((posBefore / portfolioBefore) * 100).toFixed(1) + '%',
+      weightAfter: portfolioAfter > 0 ? ((posAfter / portfolioAfter) * 100).toFixed(1) + '%' : '0%'
+    };
+  }
+
+  // Trade-risk check: given a stock the user already picked and sized (or
+  // already holds), how much is actually at risk in $ and as a % of the
+  // account, based on where the stop-loss sits — no abstract "risk %" input.
+  calcTradeRisk(accountSize, quantity, entryPrice, stopPrice) {
+    if (!accountSize || !quantity || !entryPrice || !stopPrice) return null;
+    const riskPerShare = Math.abs(entryPrice - stopPrice);
+    const riskAmount = quantity * riskPerShare;
+    const positionValue = quantity * entryPrice;
+    return {
+      riskAmount: '$' + riskAmount.toFixed(0),
+      riskPctOfAccount: ((riskAmount / accountSize) * 100).toFixed(2) + '%',
+      positionValue: '$' + positionValue.toFixed(0),
+      accountExposurePct: ((positionValue / accountSize) * 100).toFixed(1) + '%'
+    };
+  }
+
+  portfolioWeightPct(h, portfolioValue) {
+    return portfolioValue ? (h.qty * h.price / portfolioValue) * 100 : 0;
+  }
+
+  computePortfolioBeta() {
+    const active = this.holdingsData.filter((h) => !h.searchOnly);
+    const portfolioValue = active.reduce((sum, h) => sum + h.qty * h.price, 0);
+    if (!portfolioValue) return 1;
+    return active.reduce((sum, h) => {
+      const beta = this.betaByTicker[h.ticker] ?? 1;
+      return sum + (this.portfolioWeightPct(h, portfolioValue) / 100) * beta;
+    }, 0);
+  }
+
+  hashString(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return h >>> 0;
+  }
+
+  seededRandom(seed) {
+    let t = seed;
+    return () => {
+      t += 0x6d2b79f5;
+      let x = Math.imul(t ^ (t >>> 15), t | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  buildQuarterHistory(ticker, metricKey, currentValue, quarters) {
+    const rand = this.seededRandom(this.hashString(ticker + ':' + metricKey));
+    const values = [currentValue];
+    let value = currentValue;
+    for (let i = 1; i < quarters; i++) {
+      const drift = (rand() - 0.5) * 0.22;
+      value = value / (1 + drift);
+      values.unshift(Math.max(value, 0.1));
+    }
+    let quarter = 3, year = 26;
+    const labels = [];
+    for (let i = 0; i < quarters; i++) {
+      labels.unshift('Q' + quarter + " '" + year);
+      quarter -= 1;
+      if (quarter === 0) { quarter = 4; year -= 1; }
+    }
+    return values.map((v, i) => ({ period: labels[i], value: v }));
+  }
+
+  renderVals() {
+    // --- Investing-mode portfolio risk stats (beta / vol / VaR, concentration, stress presets) ---
+    const activeHoldings = this.holdingsData.filter((h) => !h.searchOnly);
+    const portfolioValue = activeHoldings.reduce((sum, h) => sum + h.qty * h.price, 0);
+    const portfolioBeta = this.computePortfolioBeta();
+    const annualVolPct = portfolioBeta * this.ASSUMED_MARKET_ANNUAL_VOL_PCT;
+    const dailyVolPct = annualVolPct / Math.sqrt(this.TRADING_DAYS_PER_YEAR);
+    const varPct = dailyVolPct * this.Z_SCORE_95;
+    const varUsd = portfolioValue * (varPct / 100);
+
+    const concentrationRows = activeHoldings
+      .map((h) => ({ ticker: h.ticker, weightPct: this.portfolioWeightPct(h, portfolioValue) }))
+      .sort((a, b) => b.weightPct - a.weightPct)
+      .map((h) => {
+        const level = h.weightPct >= 20 ? 'high' : h.weightPct >= 10 ? 'medium' : 'low';
+        const barColor = level === 'high' ? '#f0576a' : level === 'medium' ? '#f59e0b' : '#34c77b';
+        return { ticker: h.ticker, weightLabel: h.weightPct.toFixed(1) + '%', barWidth: Math.min(h.weightPct, 100) + '%', barColor };
+      });
+
+    const sectorWeights = {};
+    activeHoldings.forEach((h) => {
+      sectorWeights[h.sector] = (sectorWeights[h.sector] || 0) + this.portfolioWeightPct(h, portfolioValue);
+    });
+    const topSectorEntry = Object.entries(sectorWeights).sort((a, b) => b[1] - a[1])[0] || null;
+
+    const STRESS_SCENARIOS = [
+      { id: 'pullback', label: 'תיקון קל', marketMovePct: -5 },
+      { id: 'correction', label: 'תיקון', marketMovePct: -10 },
+      { id: 'bear', label: 'שוק דובי', marketMovePct: -20 },
+      { id: 'crash', label: 'משבר / קריסה', marketMovePct: -35 }
+    ];
+    const stressButtons = STRESS_SCENARIOS.map((s) => ({
+      id: s.id,
+      label: s.label,
+      marketMoveLabel: 'שוק ' + s.marketMovePct + '%',
+      bg: this.state.stressActiveId === s.id ? '#3b82f6' : '#1e222b',
+      color: this.state.stressActiveId === s.id ? '#ffffff' : '#94a3b8',
+      pick: () => this.setState({ stressActiveId: s.id })
+    }));
+    const activeStress = STRESS_SCENARIOS.find((s) => s.id === this.state.stressActiveId) || null;
+    let stressResult = null;
+    if (activeStress) {
+      const portfolioMovePct = activeStress.marketMovePct * portfolioBeta;
+      const lossUsd = portfolioValue * (portfolioMovePct / 100);
+      const newValue = portfolioValue + lossUsd;
+      stressResult = {
+        betaLabel: portfolioBeta.toFixed(2),
+        movePct: this.formatPct(portfolioMovePct),
+        lossUsd: '-$' + Math.abs(lossUsd).toFixed(0),
+        newValue: '$' + newValue.toLocaleString('he-IL', { maximumFractionDigits: 0 })
+      };
+    }
+
+    const holdings = this.holdingsData.filter((h) => !h.searchOnly).map((h) => {
+      const pnlPct = ((h.price - h.avgCost) / h.avgCost) * 100;
+      return {
+        ticker: h.ticker,
+        name: h.name,
+        qty: h.qty,
+        avgCost: '$' + h.avgCost.toFixed(2),
+        price: '$' + h.price.toFixed(2),
+        pnl: this.formatPct(pnlPct),
+        pnlColor: pnlPct >= 0 ? '#34c77b' : '#f0576a',
+        weight: h.weight,
+        change: h.stage === 3 ? '-0.8%' : '+' + (Math.random() * 0 + 1.5).toFixed(1) + '%',
+        changeColor: h.stage === 3 ? '#f0576a' : '#34c77b',
+        pick: () => this.setState({ stockModalOpen: true, selectedTicker: h.ticker, activeMetric: null, newsExpanded: false })
+      };
+    });
+
+    const activeBenchmark = this.benchmarks.find((b) => b.id === this.state.benchmarkId) || this.benchmarks[0];
+    const performance = ['weekly', 'monthly', 'quarterly', 'ytd', 'yearly'].map((key) => ({
+      label: this.periodLabels[key],
+      value: this.formatPct(this.portfolioReturns[key]),
+      color: '#34c77b',
+      benchmarkLabel: activeBenchmark.label,
+      benchmarkValue: this.formatPct(activeBenchmark.returns[key])
+    }));
+
+    const riskButtons = [
+      { ...this.makeButton('ניהול סיכונים', 'מחשבון גודל פוזיציה, יחסי סיכון/סיכוי וניהול סטופ-לוס, ובדיקת תרחישים לתיק', '🛡️'), pick: () => this.setState({ riskModalOpen: true }) },
+      this.makeButton('הרכבת תיק השקעות', 'בניית ומעקב אחר הקצאת נכסים וחשיפה כוללת', '📊'),
+      this.makeButton('הערכת שווי מותאמת', 'DCF, EV/EBITDA, מכפילים עתידיים, תשואת FCF ו-SOTP', '🧮')
+    ];
+
+    const briefButtons = [
+      this.makeButton('בריף חדשות עולמי', '', '🌍'),
+      this.makeButton('בריף שווקים גלובליים', '', '🏦'),
+      this.makeButton('בריף שוק ישראלי', '', '🇮🇱'),
+      this.makeButton('בריף שוק אמריקאי', '', '🏙️'),
+      this.makeButton('בריף טכנולוגיה וצמיחה', '', '⚙️'),
+      this.makeButton('בריף מניות התיק', '', '💼')
+    ];
+
+    const researchButtons = [
+      this.makeButton('ניתוח דוחות כספיים', 'העלאת 10-K / 10-Q או תמלול שיחת רווחים לחילוץ מדדים מרכזיים', '🔍'),
+      this.makeButton('בניית תזה', 'טופס מובנה ליצירת תזת השקעה מקצועית ומעמיקה', '📝'),
+      this.makeButton('סיכום שבועי', 'סקירת תשואות מדדים, קריפטו ואג"ח וסיכום מאקרו שבועי', '🗓️')
+    ];
+
+    const selectedHolding = this.holdingsData.find((h) => h.ticker === this.state.selectedTicker);
+
+    const metricDefs = [
+      { key: 'pe', label: 'P/E', suffix: '' },
+      { key: 'evEbitda', label: 'EV/EBITDA', suffix: '' },
+      { key: 'ps', label: 'P/S', suffix: '' },
+      { key: 'roi', label: 'ROI', suffix: '%' },
+      { key: 'roe', label: 'ROE', suffix: '%' },
+      { key: 'roa', label: 'ROA', suffix: '%' }
+    ];
+
+    const makeTile = (holding, def) => {
+      const rawValue = holding[def.key];
+      const isPct = def.suffix === '%';
+      const active = this.state.activeMetric === def.key;
+      return {
+        key: def.key,
+        label: def.label,
+        value: (isPct ? this.formatPct(rawValue) : rawValue.toFixed(1)),
+        avg: (isPct ? this.formatPct(holding.avg[def.key]) : holding.avg[def.key].toFixed(1)),
+        bg: active ? 'rgba(59,130,246,0.12)' : '#1e222b',
+        border: active ? '#3b82f6' : '#272b35',
+        pick: () => this.setState({ activeMetric: active ? null : def.key })
+      };
+    };
+
+    let selectedStock = {
+      ticker: '', name: '', sector: '', marketCap: '',
+      valuationTiles: [], profitabilityTiles: [],
+      hasChart: false, chartLabel: '', chartPath: '', chartPoints: [], chartYTicks: [],
+      stageLabel: '', stageNote: '', stageColor: '#34c77b', stageBg: 'transparent', stageLegend: [],
+      guidanceNote: '', forwardEstimates: [],
+      theses: [], visibleNews: [], hasMoreNews: false, newsToggleLabel: '', toggleNews: () => {}
+    };
+
+    const NEWS_PREVIEW_COUNT = 2;
+
+    if (selectedHolding) {
+      const valuationTiles = metricDefs.slice(0, 3).map((d) => makeTile(selectedHolding, d));
+      const profitabilityTiles = metricDefs.slice(3).map((d) => makeTile(selectedHolding, d));
+
+      let hasChart = false, chartLabel = '', chartPath = '', chartPoints = [], chartYTicks = [];
+      if (this.state.activeMetric) {
+        const def = metricDefs.find((d) => d.key === this.state.activeMetric);
+        const history = this.buildQuarterHistory(selectedHolding.ticker, def.key, selectedHolding[def.key], 8);
+        const values = history.map((p) => p.value);
+        const maxVal = Math.max(...values);
+        const minVal = Math.min(...values, 0);
+        const range = Math.max(maxVal - minVal, 0.001);
+        const padLeft = 40, padRight = 16, padTop = 18, padBottom = 28, w = 560, h = 170;
+        const chartH = h - padTop - padBottom;
+        const chartW = w - padLeft - padRight;
+        const stepX = history.length > 1 ? chartW / (history.length - 1) : 0;
+        const toX = (i) => padLeft + i * stepX;
+        const toY = (v) => padTop + (chartH - ((v - minVal) / range) * chartH);
+
+        hasChart = true;
+        chartLabel = def.label;
+        chartPath = history.map((p, i) => (i === 0 ? 'M' : 'L') + ' ' + toX(i).toFixed(1) + ' ' + toY(p.value).toFixed(1)).join(' ');
+        chartPoints = history.map((p, i) => {
+          const isLast = i === history.length - 1;
+          const x = toX(i);
+          const y = toY(p.value);
+          return {
+            x,
+            y,
+            r: isLast ? 4.5 : 3.5,
+            fill: isLast ? '#3b82f6' : '#0f1115',
+            leftPct: (x / w) * 100,
+            valueTopPct: ((y - 10) / h) * 100,
+            valueLabel: p.value.toFixed(1) + def.suffix,
+            period: p.period
+          };
+        });
+        const Y_AXIS_TICKS = 4;
+        chartYTicks = Array.from({ length: Y_AXIS_TICKS + 1 }, (_, i) => {
+          const value = minVal + (range * i) / Y_AXIS_TICKS;
+          const y = toY(value);
+          return { y, topPct: (y / h) * 100, label: value.toFixed(1) + def.suffix, dash: i === 0 ? 'none' : '3 3' };
+        });
+      }
+
+      const stageLegend = [1, 2, 3, 4].map((stage) => {
+        const isCurrent = stage === selectedHolding.stage;
+        const d = this.stageDescriptions[stage];
+        return {
+          title: d.title,
+          desc: d.desc,
+          currentTag: isCurrent ? ' · המצב הנוכחי' : '',
+          titleColor: isCurrent ? '#f1f5f9' : '#94a3b8',
+          bg: isCurrent ? 'rgba(59,130,246,0.10)' : 'transparent',
+          ring: isCurrent ? 'inset 0 0 0 1px rgba(59,130,246,0.4)' : 'none'
+        };
+      });
+
+      const newsExpanded = this.state.newsExpanded;
+      const allNews = selectedHolding.news;
+      const visibleNews = newsExpanded ? allNews : allNews.slice(0, NEWS_PREVIEW_COUNT);
+      const hasMoreNews = allNews.length > NEWS_PREVIEW_COUNT;
+
+      selectedStock = {
+        ticker: selectedHolding.ticker,
+        name: selectedHolding.name,
+        sector: selectedHolding.sector,
+        marketCap: selectedHolding.marketCap,
+        valuationTiles,
+        profitabilityTiles,
+        hasChart,
+        chartLabel,
+        chartPath,
+        chartPoints,
+        chartYTicks,
+        stageLabel: this.stageDescriptions[selectedHolding.stage].title,
+        stageNote: selectedHolding.stageNote,
+        stageColor: selectedHolding.stage === 3 ? '#fcd34d' : '#34c77b',
+        stageBg: selectedHolding.stage === 3 ? 'rgba(217,119,6,0.15)' : 'rgba(52,199,123,0.15)',
+        stageLegend,
+        guidanceNote: selectedHolding.growth.note,
+        forwardEstimates: selectedHolding.growth.forward.map((fe) => ({
+          year: fe.year,
+          analystRevGrowth: this.formatPct(fe.analystRev),
+          companyRevGrowth: this.formatPct(fe.companyRev),
+          epsGrowth: this.formatPct(fe.eps),
+          forwardPE: fe.pe.toFixed(1)
+        })),
+        theses: selectedHolding.theses.map((t) => ({
+          title: t.title,
+          url: t.url,
+          source: t.source,
+          date: t.date,
+          stanceLabel: this.stanceLabels[t.stance].label,
+          stanceColor: this.stanceLabels[t.stance].color
+        })),
+        visibleNews,
+        hasMoreNews,
+        newsToggleLabel: newsExpanded ? 'הצג פחות' : ('עוד כתבות (' + (allNews.length - NEWS_PREVIEW_COUNT) + ')'),
+        toggleNews: () => this.setState({ newsExpanded: !newsExpanded })
+      };
+    }
+
+    const indexPeriods = this.indexPeriodOptions.map((p) => ({
+      id: p.id,
+      label: p.label,
+      bg: this.state.indexPeriod === p.id ? '#3b82f6' : '#1e222b',
+      color: this.state.indexPeriod === p.id ? '#ffffff' : '#94a3b8',
+      pick: () => this.setState({ indexPeriod: p.id })
+    }));
+
+    const mapIndex = (i) => {
+      const value = i.returns[this.state.indexPeriod];
+      return { label: i.label, value: i.value, change: this.formatPct(value), color: value >= 0 ? '#34c77b' : '#f0576a' };
+    };
+
+    const indexCategories = this.indexCategoryOptions.map((c) => {
+      const active = this.state.indexCategory === c.id;
+      return {
+        id: c.id,
+        label: c.label,
+        bg: active ? 'rgba(59,130,246,0.15)' : '#1e222b',
+        color: active ? '#60a5fa' : '#94a3b8',
+        ring: active ? 'inset 0 0 0 1px rgba(59,130,246,0.4)' : 'none',
+        pick: () => this.setState({ indexCategory: c.id })
+      };
+    });
+
+    const categoryDataByCategory = {
+      sectors: this.sectorIndicesData,
+      asia: this.asiaIndicesData,
+      'south-america': this.southAmericaIndicesData,
+      europe: this.europeIndicesData,
+      bonds: this.bondsData,
+      commodities: this.commoditiesData
+    };
+    const isMainCategory = this.state.indexCategory === 'main';
+    const categoryIndices = isMainCategory
+      ? []
+      : (categoryDataByCategory[this.state.indexCategory] || []).map(mapIndex);
+
+    return {
+      holdings,
+      searchQuery: this.state.searchQuery,
+      searchNotFound: this.state.searchNotFound,
+      onSearchChange: (e) => this.setState({ searchQuery: e.target.value, searchNotFound: false }),
+      onSearchSubmit: () => {
+        const ticker = (this.state.searchQuery || '').trim().toUpperCase();
+        if (!ticker) return;
+        const match = this.holdingsData.find((h) => h.ticker.toUpperCase() === ticker);
+        if (match) {
+          this.setState({ stockModalOpen: true, selectedTicker: match.ticker, activeMetric: null, newsExpanded: false, searchNotFound: false });
+        } else {
+          this.setState({ searchNotFound: true });
+        }
+      },
+      indexPeriods,
+      indexCategories,
+      isMainCategory,
+      isOtherCategory: !isMainCategory,
+      ilIndices: this.ilIndicesData.map(mapIndex),
+      globalIndices: this.globalIndicesData.map(mapIndex),
+      categoryIndices,
+      benchmarkOptions: this.benchmarks.map((b) => ({ id: b.id, label: b.label })),
+      onBenchmarkChange: (e) => this.setState({ benchmarkId: e.target.value }),
+      performance,
+      riskButtons,
+      briefButtons,
+      researchButtons,
+      modalOpen: this.state.modalOpen,
+      modalTitle: this.state.modalTitle,
+      closeModal: () => this.setState({ modalOpen: false }),
+      stockModalOpen: this.state.stockModalOpen,
+      selectedStock,
+      closeStockModal: () => this.setState({ stockModalOpen: false, activeMetric: null, newsExpanded: false }),
+
+      // --- Risk management modal (trading / investing mode split) ---
+      riskModalOpen: this.state.riskModalOpen,
+      closeRiskModal: () => this.setState({ riskModalOpen: false }),
+      riskModeIsNull: this.state.riskMode === null,
+      riskModeIsTrading: this.state.riskMode === 'trading',
+      riskModeIsInvesting: this.state.riskMode === 'investing',
+      pickTradingMode: () => this.setState({ riskMode: 'trading' }),
+      pickInvestingMode: () => this.setState({ riskMode: 'investing' }),
+      backToRiskModeChoice: () => this.setState({ riskMode: null }),
+      riskTradingTabIsTradeRisk: this.state.riskTradingTab === 'trade-risk',
+      riskTradingTabIsRiskReward: this.state.riskTradingTab === 'risk-reward',
+      pickTradeRiskTab: () => this.setState({ riskTradingTab: 'trade-risk' }),
+      pickRiskRewardTab: () => this.setState({ riskTradingTab: 'risk-reward' }),
+      tradeRiskTabBg: this.state.riskTradingTab === 'trade-risk' ? '#3b82f6' : '#1e222b',
+      tradeRiskTabColor: this.state.riskTradingTab === 'trade-risk' ? '#ffffff' : '#94a3b8',
+      riskRewardTabBg: this.state.riskTradingTab === 'risk-reward' ? '#3b82f6' : '#1e222b',
+      riskRewardTabColor: this.state.riskTradingTab === 'risk-reward' ? '#ffffff' : '#94a3b8',
+
+      trTicker: this.state.trTicker,
+      trAccountSize: this.state.trAccountSize,
+      trQuantity: this.state.trQuantity,
+      trStop: this.state.trStop,
+      trHoldings: activeHoldings.map((h) => ({ ticker: h.ticker, label: h.ticker + ' · ' + h.name })),
+      trEntryPriceLabel: '$' + (activeHoldings.find((h) => h.ticker === this.state.trTicker)?.price ?? 0).toFixed(2),
+      onTrTicker: (e) => {
+        const holding = activeHoldings.find((h) => h.ticker === e.target.value);
+        this.setState({ trTicker: e.target.value, trQuantity: holding ? String(holding.qty) : this.state.trQuantity, trResult: null });
+      },
+      onTrAccountSize: (e) => this.setState({ trAccountSize: e.target.value }),
+      onTrQuantity: (e) => this.setState({ trQuantity: e.target.value }),
+      onTrStop: (e) => this.setState({ trStop: e.target.value }),
+      trResult: this.state.trResult,
+      hasTrResult: !!this.state.trResult,
+      calcTr: () => {
+        const holding = activeHoldings.find((h) => h.ticker === this.state.trTicker);
+        const entryPrice = holding ? holding.price : 0;
+        this.setState({
+          trResult: this.calcTradeRisk(Number(this.state.trAccountSize), Number(this.state.trQuantity), entryPrice, Number(this.state.trStop))
+        });
+      },
+
+      rrEntry: this.state.rrEntry,
+      rrStop: this.state.rrStop,
+      rrTarget: this.state.rrTarget,
+      onRrEntry: (e) => this.setState({ rrEntry: e.target.value }),
+      onRrStop: (e) => this.setState({ rrStop: e.target.value }),
+      onRrTarget: (e) => this.setState({ rrTarget: e.target.value }),
+      rrResult: this.state.rrResult,
+      hasRrResult: !!this.state.rrResult,
+      calcRr: () => this.setState({
+        rrResult: this.calcRiskReward(Number(this.state.rrEntry), Number(this.state.rrStop), Number(this.state.rrTarget))
+      }),
+
+      scenarioTicker: this.state.scenarioTicker,
+      scenarioChangePct: this.state.scenarioChangePct,
+      onScenarioTicker: (e) => this.setState({ scenarioTicker: e.target.value }),
+      onScenarioChangePct: (e) => this.setState({ scenarioChangePct: e.target.value }),
+      scenarioHoldings: this.holdingsData.filter((h) => !h.searchOnly).map((h) => ({ ticker: h.ticker, label: h.ticker + ' · ' + h.name })),
+      scenarioResult: this.state.scenarioResult,
+      hasScenarioResult: !!this.state.scenarioResult,
+      calcScenario: () => this.setState({
+        scenarioResult: this.calcPortfolioScenario(this.state.scenarioTicker, Number(this.state.scenarioChangePct))
+      }),
+
+      portfolioBetaLabel: portfolioBeta.toFixed(2),
+      portfolioBetaNote: portfolioBeta > 1 ? 'תנודתי מהשוק' : 'פחות תנודתי מהשוק',
+      annualVolLabel: annualVolPct.toFixed(1) + '%',
+      varUsdLabel: '-$' + varUsd.toFixed(0),
+      varPctLabel: '-' + varPct.toFixed(1) + '% מהתיק ביום גרוע',
+
+      concentrationRows,
+      hasTopSector: !!topSectorEntry,
+      topSectorName: topSectorEntry ? topSectorEntry[0] : '',
+      topSectorPctLabel: topSectorEntry ? topSectorEntry[1].toFixed(1) + '%' : '',
+      topSectorHighConcentration: !!topSectorEntry && topSectorEntry[1] >= 40,
+
+      stressButtons,
+      hasStressResult: !!stressResult,
+      stressResult,
+
+      // --- Legal disclaimer + portfolio-setup gate ---
+      showDisclaimer: this.state.showDisclaimer,
+      onBuildPortfolio: () => this.setState({ showDisclaimer: false, modalOpen: true, modalTitle: 'הרכבת תיק השקעות' }),
+      onSkipDisclaimer: () => this.setState({ showDisclaimer: false })
+    };
+  }
+}
+</script>
+</body>
+</html>
