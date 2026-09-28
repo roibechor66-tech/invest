@@ -77,13 +77,17 @@ def _resolve_price(db: Session, ticker: str) -> float | None:
     return None
 
 
-def compute_from_uploaded(db: Session, ticker: str) -> DerivedMultiples | None:
-    """Returns None (not an error) when there's nothing uploaded for this
-    ticker, or when even a price can't be resolved — the router falls
-    through to a clear 502 in that case, same as every other exhausted
-    fallback chain in this app."""
+def compute_from_uploaded(db: Session, ticker: str, uploaded_by_user_id: int) -> DerivedMultiples | None:
+    """Returns None (not an error) when there's nothing uploaded by this
+    user for this ticker, or when even a price can't be resolved — the
+    router falls through to a clear 502 in that case, same as every other
+    exhausted fallback chain in this app. Scoped to the calling user only
+    (per-user isolation, CLAUDE.md entry 57) — one user's uploaded report
+    never derives multiples for another user."""
     ticker = ticker.strip().upper()
-    row: "UploadedFinancialPeriodRow | None" = uploaded_financials.get_latest_period_row(db, ticker)
+    row: "UploadedFinancialPeriodRow | None" = uploaded_financials.get_latest_period_row(
+        db, ticker, uploaded_by_user_id
+    )
     if row is None:
         return None
 

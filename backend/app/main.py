@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import Base, engine
+from app.core.migrations import run_startup_migrations
 
 # Imported so Base.metadata knows about these tables before create_all()
 # runs below — SQLAlchemy only creates tables for models that have been
@@ -38,8 +39,13 @@ from app.routers import (
 )
 
 # Create tables on startup. For anything beyond local dev, use a real
-# migration tool (e.g. Alembic) instead of create_all.
+# migration tool (e.g. Alembic) instead of create_all. create_all() only
+# creates tables that don't exist yet — it can't add a column to, or
+# change a constraint on, a table already live in production, so
+# run_startup_migrations() patches those forward afterward (see
+# app/core/migrations.py; CLAUDE.md entries 56-57 for why this exists).
 Base.metadata.create_all(bind=engine)
+run_startup_migrations(engine)
 
 app = FastAPI(
     title="Investment Platform API",

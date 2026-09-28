@@ -28,20 +28,30 @@ def upsert_periods(
     source_filename: str | None,
     uploaded_by_user_id: int | None,
 ) -> None:
-    """Save (or overwrite) each extracted period, keyed by
-    (ticker, period_label, period_type) — uploading the same period again
-    (e.g. a corrected PDF) updates it in place rather than duplicating it.
-    """
+    """Save (or overwrite) each extracted period for this user, keyed by
+    (ticker, period_label, period_type, uploaded_by_user_id) — uploading
+    the same period again (e.g. a corrected PDF) updates that same user's
+    row in place rather than duplicating it, and never touches another
+    user's row for the same ticker/period (per-user isolation, CLAUDE.md
+    entry 57)."""
     ticker = ticker.strip().upper()
     for period in periods:
         row = (
             db.query(UploadedFinancialPeriodRow)
-            .filter_by(ticker=ticker, period_label=period.period_label, period_type=period.period_type)
+            .filter_by(
+                ticker=ticker,
+                period_label=period.period_label,
+                period_type=period.period_type,
+                uploaded_by_user_id=uploaded_by_user_id,
+            )
             .first()
         )
         if row is None:
             row = UploadedFinancialPeriodRow(
-                ticker=ticker, period_label=period.period_label, period_type=period.period_type
+                ticker=ticker,
+                period_label=period.period_label,
+                period_type=period.period_type,
+                uploaded_by_user_id=uploaded_by_user_id,
             )
             db.add(row)
 
@@ -67,17 +77,23 @@ def upsert_periods(
     db.commit()
 
 
-def get_latest_period_row(db: Session, ticker: str) -> UploadedFinancialPeriodRow | None:
+def get_latest_period_row(
+    db: Session, ticker: str, uploaded_by_user_id: int
+) -> UploadedFinancialPeriodRow | None:
     """Most-recently-uploaded period for a ticker (any period_type),
+    scoped to this user only (per-user isolation, CLAUDE.md entry 57) and
     preferring quarter over annual when both were uploaded at the same
     time — used by app/services/derived_multiples.py to compute multiples
-    (P/E, P/S, EV/EBITDA, ROE, ROA) from whatever the user uploaded, for a
+    (P/E, P/S, EV/EBITDA, ROE, ROA) from whatever this user uploaded, for a
     ticker with no live/snapshot multiples at all.
     """
     ticker = ticker.strip().upper()
     rows = (
         db.query(UploadedFinancialPeriodRow)
-        .filter(UploadedFinancialPeriodRow.ticker == ticker)
+        .filter(
+            UploadedFinancialPeriodRow.ticker == ticker,
+            UploadedFinancialPeriodRow.uploaded_by_user_id == uploaded_by_user_id,
+        )
         .order_by(UploadedFinancialPeriodRow.uploaded_at.desc())
         .all()
     )
@@ -87,19 +103,30 @@ def get_latest_period_row(db: Session, ticker: str) -> UploadedFinancialPeriodRo
     return quarters[0] if quarters else rows[0]
 
 
-def upsert_guidance(db: Session, ticker: str, guidance: list[ExtractedGuidance]) -> None:
+def upsert_guidance(
+    db: Session, ticker: str, guidance: list[ExtractedGuidance], uploaded_by_user_id: int | None
+) -> None:
     """Save (or overwrite) forward guidance extracted from an uploaded
-    report's own outlook section — see UploadedGuidanceEstimate's
+    report's own outlook section, scoped to the uploading user (per-user
+    isolation, CLAUDE.md entry 57) — see UploadedGuidanceEstimate's
     docstring. A report with no guidance section simply passes []."""
     ticker = ticker.strip().upper()
     for item in guidance:
         row = (
             db.query(UploadedGuidanceEstimateRow)
-            .filter_by(ticker=ticker, period_label=item.period_label)
+            .filter_by(
+                ticker=ticker,
+                period_label=item.period_label,
+                uploaded_by_user_id=uploaded_by_user_id,
+            )
             .first()
         )
         if row is None:
-            row = UploadedGuidanceEstimateRow(ticker=ticker, period_label=item.period_label)
+            row = UploadedGuidanceEstimateRow(
+                ticker=ticker,
+                period_label=item.period_label,
+                uploaded_by_user_id=uploaded_by_user_id,
+            )
             db.add(row)
         row.estimated_revenue_usd_m = item.estimated_revenue_usd_m
         row.estimated_eps = item.estimated_eps
@@ -110,8 +137,9 @@ def upsert_guidance(db: Session, ticker: str, guidance: list[ExtractedGuidance])
         db.commit()
 
 
-def get_guidance(db: Session, ticker: str) -> list[AnalystEstimateResponse]:
-    """Read back saved guidance for a ticker, shaped exactly like
+def get_guidance(db: Session, ticker: str, uploaded_by_user_id: int) -> list[AnalystEstimateResponse]:
+    """Read back saved guidance for a ticker, scoped to this user only
+    (per-user isolation, CLAUDE.md entry 57), shaped exactly like
     AnalystEstimateResponse (yfinance's live-estimate shape) so it can
     slot into GET /{ticker}/estimates as a fallback with zero frontend
     changes — same "looks identical to the caller" convention as
@@ -119,7 +147,10 @@ def get_guidance(db: Session, ticker: str) -> list[AnalystEstimateResponse]:
     ticker = ticker.strip().upper()
     rows = (
         db.query(UploadedGuidanceEstimateRow)
-        .filter(UploadedGuidanceEstimateRow.ticker == ticker)
+        .filter(
+            UploadedGuidanceEstimateRow.ticker == ticker,
+            UploadedGuidanceEstimateRow.uploaded_by_user_id == uploaded_by_user_id,
+        )
         .order_by(UploadedGuidanceEstimateRow.period_label.asc())
         .all()
     )
@@ -136,12 +167,15 @@ def get_guidance(db: Session, ticker: str) -> list[AnalystEstimateResponse]:
 
 
 def get_periods(
-    db: Session, ticker: str, period_type: str, limit: int
+    db: Session, ticker: str, period_type: str, limit: int, uploaded_by_user_id: int
 ) -> list[FinancialPeriodResponse]:
-    """Read back saved periods for a ticker, newest-uploaded-first,
-    already shaped as FinancialPeriodResponse so the router's fallback
-    path can return them exactly like a live FMP result (with
-    `source="uploaded"` so the frontend can show that distinction).
+    """Read back saved periods for a ticker, scoped to this user only
+    (per-user isolation, CLAUDE.md entry 57 — each user's uploads are
+    private and persist across logout/login since they're tied to the
+    account, not the session), newest-uploaded-first, already shaped as
+    FinancialPeriodResponse so the router's fallback path can return them
+    exactly like a live yfinance result (with `source="uploaded"` so the
+    frontend can show that distinction).
     """
     ticker = ticker.strip().upper()
     rows = (
@@ -149,6 +183,7 @@ def get_periods(
         .filter(
             UploadedFinancialPeriodRow.ticker == ticker,
             UploadedFinancialPeriodRow.period_type == period_type,
+            UploadedFinancialPeriodRow.uploaded_by_user_id == uploaded_by_user_id,
         )
         .order_by(UploadedFinancialPeriodRow.uploaded_at.desc())
         .limit(limit)

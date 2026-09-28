@@ -34,11 +34,13 @@ def get_multiples_endpoint(
 
     Real yfinance call, not mock data. Falls back, in order, to: (1) the
     last daily-scan snapshot (source="snapshot" — see app/routers/admin.py),
-    (2) multiples derived from a user-uploaded report for this ticker plus
-    a live/snapshot price (source="uploaded" — see
+    (2) multiples derived from a report *this user* uploaded for this
+    ticker plus a live/snapshot price (source="uploaded" — see
     app/services/derived_multiples.py, for a ticker yfinance simply
-    doesn't cover). Only raises 502 (clear Hebrew message) when all three
-    are empty — never a silently fabricated number.
+    doesn't cover; scoped to the calling user only, CLAUDE.md entry 57 —
+    one user's upload never affects what another user sees). Only raises
+    502 (clear Hebrew message) when all three are empty — never a
+    silently fabricated number.
     """
     try:
         m = fundamentals.get_multiples(ticker)
@@ -47,7 +49,7 @@ def get_multiples_endpoint(
         if loaded is not None:
             payload, _updated_at = loaded
             return MultiplesResponse(**payload, source="snapshot")
-        derived = derived_multiples.compute_from_uploaded(db, ticker)
+        derived = derived_multiples.compute_from_uploaded(db, ticker, current_user.id)
         if derived is not None:
             return MultiplesResponse(
                 ticker=derived.ticker,
@@ -92,17 +94,19 @@ def get_financial_statements_endpoint(
     Tries live yfinance first (income-statement + balance-sheet + cash-
     flow-statement, combined) — real data, not mock. If that fails (no
     data for this ticker, Yahoo rate-limited, etc.), falls back in order
-    to: (1) whatever the user has uploaded and had extracted from a PDF
+    to: (1) whatever *this user* has uploaded and had extracted from a PDF
     report for this ticker (see POST /{ticker}/upload-report and
-    app/services/uploaded_financials.py), then (2) the last daily-scan
-    snapshot (see app/routers/admin.py) — each returned period is tagged
+    app/services/uploaded_financials.py — scoped to the calling user only,
+    CLAUDE.md entry 57: uploads are private per account and persist across
+    logout/login), then (2) the last daily-scan snapshot (see
+    app/routers/admin.py) — each returned period is tagged
     `source: "live"` / `"uploaded"` / `"snapshot"` so the frontend can show
     the distinction. Only raises 502 if all three sources come up empty.
     """
     try:
         periods = fundamentals.get_financial_statements(ticker, period=period, limit=limit)
     except ValueError as fetch_error:
-        uploaded = uploaded_financials.get_periods(db, ticker, period, limit)
+        uploaded = uploaded_financials.get_periods(db, ticker, period, limit, current_user.id)
         if uploaded:
             return uploaded
         loaded = snapshot_store.load_snapshot(db, ticker, f"statements_{period}")
@@ -143,9 +147,11 @@ async def upload_report_endpoint(
     """Upload a company's PDF report (10-K/10-Q/annual report) and extract
     comprehensive financial-statement data from it with Claude (native PDF
     support — same pattern as /api/research/analyze-report), then persist
-    it permanently for this ticker so it appears everywhere in the app
-    that already reads financial-statement data, as a fallback beneath
-    live FMP data (see GET /{ticker}/financial-statements above).
+    it permanently under *this user's own account* (CLAUDE.md entry 57 —
+    private per user, survives logout/login, never visible to other users)
+    so it appears everywhere in the app that already reads financial-
+    statement data, as a fallback beneath live yfinance data (see
+    GET /{ticker}/financial-statements above).
 
     Real Claude call on the actual uploaded file, not mock data — same
     declared exception/error convention as the rest of the AI features:
@@ -178,7 +184,9 @@ async def upload_report_endpoint(
         source_filename=filename,
         uploaded_by_user_id=current_user.id,
     )
-    uploaded_financials.upsert_guidance(db, ticker, extraction.guidance_estimates)
+    uploaded_financials.upsert_guidance(
+        db, ticker, extraction.guidance_estimates, uploaded_by_user_id=current_user.id
+    )
 
     return [
         FinancialPeriodResponse(
@@ -225,7 +233,7 @@ def get_analyst_estimates_endpoint(
             snapshot_estimates = [AnalystEstimateResponse(**item) for item in payload]
             if snapshot_estimates:
                 return snapshot_estimates
-        uploaded_guidance = uploaded_financials.get_guidance(db, ticker)
+        uploaded_guidance = uploaded_financials.get_guidance(db, ticker, current_user.id)
         if uploaded_guidance:
             return uploaded_guidance
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
@@ -241,8 +249,9 @@ def get_analyst_estimates_endpoint(
             for y in years
         ]
     # yfinance genuinely has nothing for this ticker (not an error) — try
-    # uploaded guidance before settling on the honest "no estimates" [].
-    return uploaded_financials.get_guidance(db, ticker)
+    # this user's uploaded guidance before settling on the honest "no
+    # estimates" [].
+    return uploaded_financials.get_guidance(db, ticker, current_user.id)
 
 
 @router.get("/{ticker}/segments", response_model=list[RevenueSegmentResponse])
