@@ -166,10 +166,11 @@ function ReportUploadControl({
 // a forward P/E table, analyst theses and recent news.
 //
 // Phase 3, third track: multiples/market-cap/growth-outlook/financial
-// statements are now LIVE (FMP — see useLiveCompanyFundamentals), with
-// an honest "(דמו)" fallback to this ticker's mock figures whenever FMP
-// has nothing (no API key configured, ticker not covered by the current
-// FMP plan, etc.) — never silently presenting the mock number as live.
+// statements are now LIVE (Yahoo Finance/yfinance — see
+// useLiveCompanyFundamentals), with an honest "(דמו)" fallback to this
+// ticker's mock figures whenever Yahoo has nothing for it (analyst
+// estimates in particular are best-effort and often simply unavailable)
+// — never silently presenting the mock number as live.
 // Per-quarter multiple HISTORY (the trend chart) and the industry-average
 // comparison baseline stay mock/illustrative — see useLiveCompanyFundamentals.ts's
 // module docstring for why those two specifically are out of scope. The
@@ -223,10 +224,10 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
 
   // "האם יש אפשרות לעלות דוח PDF של החברה" — lets the user upload a
   // 10-K/10-Q/annual report and have Claude extract the same line items
-  // FMP would (see POST /api/fundamentals/{ticker}/upload-report),
+  // yfinance would (see POST /api/fundamentals/{ticker}/upload-report),
   // persisted permanently so it shows up here (and everywhere else that
-  // reads financial-statement data) automatically from then on, even
-  // without an FMP key or for a ticker FMP doesn't cover.
+  // reads financial-statement data) automatically from then on, even for
+  // a ticker Yahoo Finance doesn't cover.
   async function handleReportFileSelected(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = ""; // allow re-selecting the same file later
@@ -345,14 +346,16 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
         {/* Financials — GuruFocus-style revenue/EBITDA/net income and
             cash-vs-debt bar charts, plus a full income-statement flow
             breakdown, each with its own annual/quarterly toggle. Live from
-            FMP when available; if not, falls back automatically to a
-            report the user uploaded and had extracted (see the upload
-            control below — POST /api/fundamentals/{ticker}/upload-report). */}
+            Yahoo Finance (yfinance) when available; if not, falls back
+            automatically to a report the user uploaded and had extracted
+            (see the upload control below — POST
+            /api/fundamentals/{ticker}/upload-report), and finally to the
+            most recent daily-scan snapshot if even that isn't available. */}
         {!financialStatements && (
           <div className="mt-6 space-y-2">
             <p className="text-xs text-amber-400">
-              אין כרגע דוחות כספיים לנייר זה{live.statementsError ? ` (${live.statementsError})` : ""} — נדרש מפתח
-              FMP מוגדר בשרת, או שניתן להעלות דוח PDF של החברה ידנית.
+              אין כרגע דוחות כספיים לנייר זה{live.statementsError ? ` (${live.statementsError})` : ""} — ניתן להעלות
+              דוח PDF של החברה ידנית.
             </p>
             <ReportUploadControl
               isUploading={isUploadingReport}
@@ -368,7 +371,12 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h4 className="text-sm font-bold text-slate-800">
                 נתונים כספיים (
-                {live.quarterlyStatements?.[0]?.source === "uploaded" ? "מדוח PDF שהועלה" : "חי — FMP"})
+                {live.quarterlyStatements?.[0]?.source === "uploaded"
+                  ? "מדוח PDF שהועלה"
+                  : live.quarterlyStatements?.[0]?.source === "snapshot"
+                    ? "סריקה יומית"
+                    : "חי"}
+                )
               </h4>
               <ReportUploadControl
                 isUploading={isUploadingReport}
@@ -459,9 +467,9 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
           </h4>
           <p className="mt-1 text-xs text-slate-500">
             {live.estimates.length > 0
-              ? "תחזיות קונצנזוס אנליסטים חיות (FMP)."
+              ? "תחזיות קונצנזוס אנליסטים חיות (Yahoo Finance)."
               : detail.growthOutlook.guidanceNoteHe +
-                " — אין כרגע תחזיות אנליסטים חיות לנייר זה (נדרש מפתח FMP בתוכנית שכוללת אומדני אנליסטים); מוצגים נתוני דמו."}
+                " — אין כרגע תחזיות אנליסטים חיות לנייר זה (מקור הנתונים אינו מספק תחזיות עבור נייר זה); מוצגים נתוני דמו."}
           </p>
 
           <div className="mt-3 overflow-x-auto">
@@ -576,10 +584,10 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
 
         <p className="mt-5 text-xs text-slate-500">
           מחיר, מכפילים, מדדי רווחיות, תחזיות אנליסטים ודוחות כספיים מוצגים
-          כנתונים חיים (Finnhub / FMP) כשזמינים, עם תיוג &quot;(דמו)&quot; מפורש בכל
-          מקום שבו נופלים בחזרה לנתון דמו כי אין עדיין מפתח/תוכנית FMP
-          מתאימה. ממוצעי הענף, מגמת המכפילים הרבעונית, שלב Weinstein, התזות
-          והחדשות נשארים נתוני דמו להדגמת המסך.
+          כנתונים חיים (Finnhub / Yahoo Finance) כשזמינים, עם תיוג &quot;(דמו)&quot;
+          מפורש בכל מקום שבו נופלים בחזרה לנתון דמו כי מקור הנתונים אינו
+          מכסה את הנייר הזה. ממוצעי הענף, מגמת המכפילים הרבעונית, שלב
+          Weinstein, התזות והחדשות נשארים נתוני דמו להדגמת המסך.
         </p>
       </div>
     </div>

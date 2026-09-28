@@ -4,23 +4,26 @@ import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { CompanyFinancials, CompanySegment } from "@/lib/mock-data/valuation-financials";
 
-// Live financials/multiples/valuation-input data (FMP) — Phase 3, third
-// track, for "חבר לי את כל האתר לדאטה" -> "וגם כל מה שקשור לפיננסים,
-// מכפילים והערכות שווי". Replaces the mock multiples/growth-outlook in
-// stock-details.ts and the mock multiples-derived financial profile in
-// valuation-financials.ts (getCompanyFinancials) that fed all five
-// valuation workspaces (DCF/growth-exit/trading-multiples/forward-
-// multiple/SOTP) and the StockDetailModal. Backed by GET
+// Live financials/multiples/valuation-input data (Yahoo Finance via
+// yfinance — migrated off Financial Modeling Prep/FMP, see CLAUDE.md
+// entry 47) — Phase 3, third track, for "חבר לי את כל האתר לדאטה" ->
+// "וגם כל מה שקשור לפיננסים, מכפילים והערכות שווי". Replaces the mock
+// multiples/growth-outlook in stock-details.ts and the mock
+// multiples-derived financial profile in valuation-financials.ts
+// (getCompanyFinancials) that fed all five valuation workspaces
+// (DCF/growth-exit/trading-multiples/forward-multiple/SOTP) and the
+// StockDetailModal. Backed by GET
 // /api/fundamentals/{ticker}/{multiples,financial-statements,estimates,
-// segments} (see backend/app/services/fundamentals.py).
+// segments} (see backend/app/services/fundamentals.py), with a
+// DB-snapshot fallback (source: "snapshot") from the daily scan — see
+// backend/app/routers/admin.py — when the live call fails.
 //
 // What this intentionally does NOT replace (documented scope boundary,
 // same honesty convention as the rest of Phase 3): sector/industry
-// AVERAGE multiples (FMP's per-sector endpoints are separately plan-
-// gated and their sector-name matching isn't verifiable without a real
-// key — see stock-details.ts), and per-quarter HISTORY of each multiple
-// (would need FMP's historical-ratios endpoint, out of scope for this
-// pass) — both stay as the existing mock/illustrative baselines.
+// AVERAGE multiples (not reliably available from yfinance — see
+// stock-details.ts), and per-quarter HISTORY of each multiple (out of
+// scope for this pass) — both stay as the existing mock/illustrative
+// baselines.
 
 export interface LiveMultiples {
   ticker: string;
@@ -52,7 +55,7 @@ export interface LiveFinancialPeriod {
   operatingIncomeUsdM: number | null;
   pretaxIncomeUsdM: number | null;
   taxUsdM: number | null;
-  source: "fmp" | "uploaded";
+  source: "live" | "uploaded" | "snapshot";
 }
 
 export interface LiveAnalystEstimateYear {
@@ -98,11 +101,12 @@ interface RawFinancialPeriod {
   operating_income_usd_m: number | null;
   pretax_income_usd_m: number | null;
   tax_usd_m: number | null;
-  // "fmp" (live) or "uploaded" (a user-uploaded PDF report — see
-  // POST /api/fundamentals/{ticker}/upload-report). Optional on the
+  // "live" (yfinance), "uploaded" (a user-uploaded PDF report — see
+  // POST /api/fundamentals/{ticker}/upload-report), or "snapshot" (the
+  // last daily scan — see backend/app/routers/admin.py). Optional on the
   // TS side only because older cached responses during dev may omit it;
   // the backend always sends it now.
-  source?: "fmp" | "uploaded";
+  source?: "live" | "uploaded" | "snapshot";
 }
 
 interface RawAnalystEstimate {
@@ -125,9 +129,9 @@ export interface LiveCompanyFundamentals {
   quarterlyStatements: LiveFinancialPeriod[] | null;
   annualStatements: LiveFinancialPeriod[] | null;
   statementsError: string | null;
-  // [] means "loaded, genuinely none available" (e.g. FMP plan doesn't
-  // include this) — not the same as null/loading. See fundamentals.py's
-  // two-tier honesty split.
+  // [] means "loaded, genuinely none available" (yfinance simply has
+  // nothing for this ticker) — not the same as null/loading. See
+  // fundamentals.py's two-tier honesty split.
   estimates: LiveAnalystEstimateYear[];
   segments: LiveRevenueSegment[];
   // Convenience: the same CompanyFinancials shape the five valuation
@@ -174,15 +178,15 @@ function toLivePeriod(raw: RawFinancialPeriod): LiveFinancialPeriod {
     operatingIncomeUsdM: raw.operating_income_usd_m,
     pretaxIncomeUsdM: raw.pretax_income_usd_m,
     taxUsdM: raw.tax_usd_m,
-    source: raw.source ?? "fmp",
+    source: raw.source ?? "live",
   };
 }
 
 // Builds the CompanyFinancials shape the valuation workspaces already
 // know how to consume, from live pieces. Mirrors the OLD
 // getCompanyFinancials()'s derivation logic only where a live period is
-// missing a field FMP didn't return (fcf/ebitda/shares) — otherwise uses
-// the live numbers directly instead of deriving everything from
+// missing a field yfinance didn't return (fcf/ebitda/shares) — otherwise
+// uses the live numbers directly instead of deriving everything from
 // multiples the way the mock version did.
 function buildCompanyFinancials(
   ticker: string,
@@ -198,7 +202,7 @@ function buildCompanyFinancials(
   const companySegments: CompanySegment[] | undefined =
     segments.length > 0
       ? segments.map((s) => ({
-          nameHe: s.name, // FMP segment names are English; shown as-is, unlike the rest of the app's Hebrew labels
+          nameHe: s.name, // yfinance segment names are English; shown as-is, unlike the rest of the app's Hebrew labels
           revenueSharePct: s.revenueSharePct,
           suggestedMultiple: multiples.evEbitda ?? 12, // no live per-segment multiple; blended company multiple as a stand-in
         }))

@@ -872,10 +872,11 @@ class FinancialPeriodResponse(BaseModel):
     operating_income_usd_m: float | None
     pretax_income_usd_m: float | None
     tax_usd_m: float | None
-    # "fmp" (live) or "uploaded" (from a user-uploaded PDF report, see
-    # app/services/uploaded_financials.py) — default keeps every existing
+    # "live" (yfinance), "uploaded" (from a user-uploaded PDF report, see
+    # app/services/uploaded_financials.py), or "snapshot" (the last daily
+    # scan — see app/routers/admin.py). Default keeps every existing
     # caller (which never set this) behaving exactly as before.
-    source: str = "fmp"
+    source: str = "live"
 
 
 # --- PDF-upload financial-data extraction (persisted per ticker) -----------

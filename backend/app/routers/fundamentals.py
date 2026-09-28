@@ -1,9 +1,9 @@
 """Live financials/multiples/valuation-input endpoints (Phase 3, third
-track — FMP). See app/services/fundamentals.py for the integration
-itself, including the no-API-key error convention, the plan-restricted
-(analyst estimates / segments) empty-list convention, and the several
-unverified field-name/ordering caveats that still need checking against
-a real FMP key.
+track — Yahoo Finance via yfinance; migrated off Financial Modeling
+Prep/FMP, see CLAUDE.md entry 47). See app/services/fundamentals.py for
+the integration itself, including the best-effort empty-list convention
+for analyst estimates/segments (yfinance simply doesn't have this for
+every ticker — not an error).
 """
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -77,12 +77,12 @@ def get_financial_statements_endpoint(
     report for this ticker (see POST /{ticker}/upload-report and
     app/services/uploaded_financials.py), then (2) the last daily-scan
     snapshot (see app/routers/admin.py) — each returned period is tagged
-    `source: "fmp"` / `"uploaded"` / `"snapshot"` so the frontend can show
+    `source: "live"` / `"uploaded"` / `"snapshot"` so the frontend can show
     the distinction. Only raises 502 if all three sources come up empty.
     """
     try:
         periods = fundamentals.get_financial_statements(ticker, period=period, limit=limit)
-    except ValueError as fmp_error:
+    except ValueError as fetch_error:
         uploaded = uploaded_financials.get_periods(db, ticker, period, limit)
         if uploaded:
             return uploaded
@@ -90,7 +90,7 @@ def get_financial_statements_endpoint(
         if loaded is not None:
             payload, _updated_at = loaded
             return [FinancialPeriodResponse(**item, source="snapshot") for item in payload[:limit]]
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(fmp_error))
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(fetch_error))
     return [
         FinancialPeriodResponse(
             period_label=p.period_label,
@@ -108,7 +108,7 @@ def get_financial_statements_endpoint(
             operating_income_usd_m=p.operating_income_usd_m,
             pretax_income_usd_m=p.pretax_income_usd_m,
             tax_usd_m=p.tax_usd_m,
-            source="fmp",
+            source="live",
         )
         for p in periods
     ]
