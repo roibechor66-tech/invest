@@ -41,6 +41,19 @@ def get_multiples_endpoint(
     one user's upload never affects what another user sees). Only raises
     502 (clear Hebrew message) when all three are empty — never a
     silently fabricated number.
+
+    IMPORTANT (CLAUDE.md entry 59): yfinance frequently returns a
+    *partial* result for a real ticker it has SOME data for (price,
+    market cap) but not full multiples (P/E, EV/EBITDA, P/S, ROE, ROA are
+    each independently missing from Yahoo's own `.info` payload for a lot
+    of tickers, e.g. Credo/CRDO) — that does NOT raise ValueError, so the
+    fallback chain above never used to even run for those fields. Below,
+    any individual multiple that came back None from the live call is
+    filled in from the uploaded-report-derived values (if the user
+    uploaded a report and a market price is available) BEFORE returning —
+    field by field, not all-or-nothing — so a real ticker with partial
+    Yahoo coverage still gets full multiples once the user uploads a
+    report, instead of silently showing "(דמו)" for the missing ones.
     """
     try:
         m = fundamentals.get_multiples(ticker)
@@ -66,18 +79,26 @@ def get_multiples_endpoint(
                 source="uploaded",
             )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+    derived = None
+    if any(v is None for v in (m.pe_ratio, m.ev_ebitda, m.price_to_sales, m.roe_pct, m.roa_pct)):
+        derived = derived_multiples.compute_from_uploaded(db, ticker, current_user.id)
+
     return MultiplesResponse(
         ticker=m.ticker,
         name=m.name,
         sector=m.sector,
         market_cap_usd=m.market_cap_usd,
         price_usd=m.price_usd,
-        pe_ratio=m.pe_ratio,
-        ev_ebitda=m.ev_ebitda,
-        price_to_sales=m.price_to_sales,
-        roe_pct=m.roe_pct,
-        roa_pct=m.roa_pct,
+        pe_ratio=m.pe_ratio if m.pe_ratio is not None else (derived.pe_ratio if derived else None),
+        ev_ebitda=m.ev_ebitda if m.ev_ebitda is not None else (derived.ev_ebitda if derived else None),
+        price_to_sales=(
+            m.price_to_sales if m.price_to_sales is not None else (derived.price_to_sales if derived else None)
+        ),
+        roe_pct=m.roe_pct if m.roe_pct is not None else (derived.roe_pct if derived else None),
+        roa_pct=m.roa_pct if m.roa_pct is not None else (derived.roa_pct if derived else None),
         roic_pct=m.roic_pct,
+        source="live",
     )
 
 

@@ -300,9 +300,21 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
 
     When the `web_search` tool is used, `message.content` interleaves
     `server_tool_use` / `web_search_tool_result` blocks (the searches
-    themselves) alongside the model's own `text` blocks — this collects
-    only the text blocks, which is where the model was instructed to put
-    its final JSON answer after it finished searching.
+    themselves) alongside the model's own `text` blocks — and Claude very
+    commonly emits a short SEPARATE text block before/between searches
+    ("Let me search for the latest data on this...", "I'll also check...")
+    in addition to the final text block that actually holds the JSON
+    answer. The previous version of this function joined ALL text blocks
+    with "" and assumed the *entire* result was one JSON document — so any
+    such commentary text (present in a real run, not just a theoretical
+    edge case — this is exactly what was causing "הניתוח שהתקבל אינו
+    בפורמט תקין" for the web-search-backed bot features, independent of
+    the `max_tokens` limit) broke `json.loads()` even when the model's
+    actual JSON was itself perfectly well-formed. Fix: after joining and
+    stripping code fences as before, slice from the first "{" to the
+    matching last "}" and parse only that — this discards any commentary
+    text before or after the JSON object while still working correctly
+    for the normal case where the whole string already is the JSON.
     """
     raw_text = "".join(
         block.text for block in message.content if getattr(block, "type", None) == "text"
@@ -313,8 +325,12 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
         if raw_text.lower().startswith("json"):
             raw_text = raw_text[4:].strip()
 
+    start = raw_text.find("{")
+    end = raw_text.rfind("}")
+    json_candidate = raw_text[start : end + 1] if start != -1 and end != -1 and end > start else raw_text
+
     try:
-        return json.loads(raw_text)
+        return json.loads(json_candidate)
     except json.JSONDecodeError as exc:
         raise ValueError("הניתוח שהתקבל אינו בפורמט תקין — נסו שוב") from exc
 
@@ -541,7 +557,17 @@ def analyze_trends() -> TrendAnalysisResponse:
     try:
         message = client.messages.create(
             model=settings.anthropic_model,
-            max_tokens=4096,
+            # 4096 was too low here: this call does live web_search *and*
+            # asks for several trends, each with a long details_he (5-8
+            # sentences) — real runs were hitting the token cap mid-JSON,
+            # so json.loads() failed on the truncated output and the user
+            # saw "הניתוח שהתקבל אינו בפורמט תקין" (this is the bug the
+            # user reported — not an API-key/credits problem). Bumped to
+            # match the token budget already used by this file's other
+            # long, web-search-backed JSON responses (weekly summaries use
+            # 10000-16000; this one's output is smaller, so 8000 is ample
+            # headroom without over-provisioning).
+            max_tokens=8000,
             system=TREND_ANALYSIS_SYSTEM_PROMPT,
             tools=[WEB_SEARCH_TOOL],
             messages=[
@@ -668,7 +694,10 @@ def analyze_economy() -> EconomicTrendsResponse:
     try:
         message = client.messages.create(
             model=settings.anthropic_model,
-            max_tokens=4096,
+            # Same fix as analyze_trends() above (CLAUDE.md entry 58) —
+            # this is also a web_search-backed, multi-item detailed-JSON
+            # response that could get truncated mid-JSON at 4096 tokens.
+            max_tokens=8000,
             system=ECONOMIC_TRENDS_SYSTEM_PROMPT,
             tools=[WEB_SEARCH_TOOL],
             messages=[
