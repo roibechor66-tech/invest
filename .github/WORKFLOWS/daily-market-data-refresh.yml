@@ -1,0 +1,38 @@
+name: Daily market data refresh
+
+# Triggers the backend's daily market-data scan (POST /api/admin/refresh-market-data
+# — see backend/app/routers/admin.py). Render's free tier has no built-in
+# scheduler, so this free GitHub Actions cron is what actually fires the
+# scan once a day; it also has the side effect of waking the backend up
+# if it had spun down from inactivity.
+#
+# Required setup (one-time):
+#   1. Set ADMIN_REFRESH_SECRET to some long random string as an environment
+#      variable on the Render backend service.
+#   2. Add the SAME value as a GitHub Actions secret on this repo, named
+#      ADMIN_REFRESH_SECRET (Settings -> Secrets and variables -> Actions).
+#   3. Add a repository variable (not secret) named BACKEND_URL with your
+#      Render backend's base URL, e.g. https://invest-s911.onrender.com
+#      (Settings -> Secrets and variables -> Actions -> Variables tab).
+#
+# You can also trigger a scan manually any time from the Actions tab
+# ("Run workflow") without waiting for the schedule.
+
+on:
+  schedule:
+    # 04:00 UTC daily (06:00/07:00 Israel time depending on DST) — well
+    # after US markets close and before the Israeli trading day starts,
+    # so the scan reflects each market's most recent full session.
+    - cron: "0 4 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the backend's daily refresh endpoint
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${{ vars.BACKEND_URL }}/api/admin/refresh-market-data" \
+            -H "X-Admin-Secret: ${{ secrets.ADMIN_REFRESH_SECRET }}" \
+            --max-time 600
