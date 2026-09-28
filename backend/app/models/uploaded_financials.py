@@ -50,7 +50,40 @@ class UploadedFinancialPeriod(Base):
     operating_income_usd_m = Column(Float, nullable=True)
     pretax_income_usd_m = Column(Float, nullable=True)
     tax_usd_m = Column(Float, nullable=True)
+    # Balance-sheet totals, used only to derive ROE/ROA when this ticker
+    # has no live/snapshot multiples at all — see
+    # app/services/derived_multiples.py. Not surfaced in the financial-
+    # statements table itself.
+    total_assets_usd_m = Column(Float, nullable=True)
+    total_equity_usd_m = Column(Float, nullable=True)
 
     source_filename = Column(String(255), nullable=True)
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class UploadedGuidanceEstimate(Base):
+    """Forward guidance a user-uploaded report states in its own
+    outlook/guidance section (e.g. "we expect Q4 revenue of $X-Y million")
+    — distinct from yfinance's live analyst-consensus estimates, but saved
+    in the same shape so GET /{ticker}/estimates can fall back to it when
+    yfinance has nothing for this ticker. One row per (ticker,
+    period_label); re-uploading overwrites (upsert), same convention as
+    UploadedFinancialPeriod above.
+    """
+
+    __tablename__ = "uploaded_guidance_estimates"
+    __table_args__ = (
+        UniqueConstraint("ticker", "period_label", name="uq_uploaded_guidance_estimate"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String(20), nullable=False, index=True)
+    period_label = Column(String(50), nullable=False)
+
+    estimated_revenue_usd_m = Column(Float, nullable=True)
+    estimated_eps = Column(Float, nullable=True)
+    revenue_growth_pct = Column(Float, nullable=True)
+    eps_growth_pct = Column(Float, nullable=True)
+
     uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

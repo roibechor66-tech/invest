@@ -18,7 +18,7 @@ from app.models.schemas import (
     RevenueSegmentResponse,
 )
 from app.models.user import User
-from app.services import fundamentals, snapshot_store, uploaded_financials
+from app.services import derived_multiples, fundamentals, snapshot_store, uploaded_financials
 from app.services import research as research_service
 
 router = APIRouter()
@@ -32,10 +32,13 @@ def get_multiples_endpoint(
 ) -> MultiplesResponse:
     """Live company profile + trailing multiples/profitability ratios.
 
-    Real yfinance call, not mock data. Falls back to the last daily-scan
-    snapshot (source="snapshot" — see app/routers/admin.py) if the live
-    call fails; only raises 502 (clear Hebrew message) when the ticker
-    has no snapshot either — never a silently fabricated number.
+    Real yfinance call, not mock data. Falls back, in order, to: (1) the
+    last daily-scan snapshot (source="snapshot" — see app/routers/admin.py),
+    (2) multiples derived from a user-uploaded report for this ticker plus
+    a live/snapshot price (source="uploaded" — see
+    app/services/derived_multiples.py, for a ticker yfinance simply
+    doesn't cover). Only raises 502 (clear Hebrew message) when all three
+    are empty — never a silently fabricated number.
     """
     try:
         m = fundamentals.get_multiples(ticker)
@@ -44,6 +47,22 @@ def get_multiples_endpoint(
         if loaded is not None:
             payload, _updated_at = loaded
             return MultiplesResponse(**payload, source="snapshot")
+        derived = derived_multiples.compute_from_uploaded(db, ticker)
+        if derived is not None:
+            return MultiplesResponse(
+                ticker=derived.ticker,
+                name=derived.name,
+                sector=derived.sector,
+                market_cap_usd=derived.market_cap_usd,
+                price_usd=derived.price_usd,
+                pe_ratio=derived.pe_ratio,
+                ev_ebitda=derived.ev_ebitda,
+                price_to_sales=derived.price_to_sales,
+                roe_pct=derived.roe_pct,
+                roa_pct=derived.roa_pct,
+                roic_pct=derived.roic_pct,
+                source="uploaded",
+            )
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return MultiplesResponse(
         ticker=m.ticker,
@@ -159,6 +178,7 @@ async def upload_report_endpoint(
         source_filename=filename,
         uploaded_by_user_id=current_user.id,
     )
+    uploaded_financials.upsert_guidance(db, ticker, extraction.guidance_estimates)
 
     return [
         FinancialPeriodResponse(
@@ -191,25 +211,38 @@ def get_analyst_estimates_endpoint(
     not an error) when this is unavailable for this ticker — a real but
     honest "no forward estimates" state, not a failure. On a transport
     failure, falls back to the last daily-scan snapshot (see
-    app/routers/admin.py) before raising 502."""
+    app/routers/admin.py); if yfinance simply has nothing (empty list —
+    not a failure) or the snapshot is also empty, falls back further to
+    any forward guidance the user extracted from an uploaded report's own
+    outlook section (see app/services/uploaded_financials.py::get_guidance)
+    before finally returning an empty list."""
     try:
         years = fundamentals.get_analyst_estimates(ticker)
     except ValueError as exc:
         loaded = snapshot_store.load_snapshot(db, ticker, "estimates")
         if loaded is not None:
             payload, _updated_at = loaded
-            return [AnalystEstimateResponse(**item) for item in payload]
+            snapshot_estimates = [AnalystEstimateResponse(**item) for item in payload]
+            if snapshot_estimates:
+                return snapshot_estimates
+        uploaded_guidance = uploaded_financials.get_guidance(db, ticker)
+        if uploaded_guidance:
+            return uploaded_guidance
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
-    return [
-        AnalystEstimateResponse(
-            period_label=y.period_label,
-            estimated_revenue_usd_m=y.estimated_revenue_usd_m,
-            estimated_eps=y.estimated_eps,
-            revenue_growth_pct=y.revenue_growth_pct,
-            eps_growth_pct=y.eps_growth_pct,
-        )
-        for y in years
-    ]
+    if years:
+        return [
+            AnalystEstimateResponse(
+                period_label=y.period_label,
+                estimated_revenue_usd_m=y.estimated_revenue_usd_m,
+                estimated_eps=y.estimated_eps,
+                revenue_growth_pct=y.revenue_growth_pct,
+                eps_growth_pct=y.eps_growth_pct,
+            )
+            for y in years
+        ]
+    # yfinance genuinely has nothing for this ticker (not an error) — try
+    # uploaded guidance before settling on the honest "no estimates" [].
+    return uploaded_financials.get_guidance(db, ticker)
 
 
 @router.get("/{ticker}/segments", response_model=list[RevenueSegmentResponse])

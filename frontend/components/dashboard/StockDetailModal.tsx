@@ -300,6 +300,11 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
         {/* Valuation multiples vs. industry average */}
         <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
           מכפילי שווי <span className="normal-case text-slate-600">(לחצו למגמה רבעונית)</span>
+          {live.multiples?.source === "uploaded" && (
+            <span className="ms-1.5 normal-case text-amber-500">
+              (מחושב מהדוח שהועלה + מחיר שוק)
+            </span>
+          )}
         </p>
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {valuationKeys.map((key) => (
@@ -355,7 +360,8 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
           <div className="mt-6 space-y-2">
             <p className="text-xs text-amber-400">
               אין כרגע דוחות כספיים לנייר זה{live.statementsError ? ` (${live.statementsError})` : ""} — ניתן להעלות
-              דוח PDF של החברה ידנית.
+              דוח PDF של החברה ידנית, וממנו יחושבו גם דוחות כספיים, מכפילים (אם יש מחיר שוק זמין)
+              ותחזיות קדימה (אם הדוח כולל הנחיית הנהלה).
             </p>
             <ReportUploadControl
               isUploading={isUploadingReport}

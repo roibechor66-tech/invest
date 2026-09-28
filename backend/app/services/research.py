@@ -185,6 +185,8 @@ FUNDAMENTALS_EXTRACTION_SYSTEM_PROMPT = """אתה אנליסט פיננסי שת
 - "period_type": "annual" לדוח/תקופה שנתית (10-K/דוח שנתי), "quarter" לדוח/תקופה רבעונית (10-Q/דוח רבעוני).
 - "period_label": תווית קצרה וברורה, לדוגמה "Q3 2025" או "2025".
 - אם ניתן לזהות את שם החברה מהדוח, מלאו את company_name_detected; אחרת null.
+- total_assets_usd_m/total_equity_usd_m: סך הנכסים וסך ההון העצמי מהמאזן, אם מדווחים בבירור בדוח (נדרשים לחישוב ROA/ROE) — אחרת null.
+- guidance_estimates: אם ובאילו הדוח כולל סעיף תחזית/הנחיית הנהלה קדימה (guidance/outlook) - חלצו אותו לרשימה נפרדת זו (לא לתוך periods, שזה נתונים היסטוריים בפועל). כל פריט מייצג תקופה עתידית שההנהלה נתנה לגביה תחזית: period_label (למשל "Q4 2025" או "FY2026"), estimated_revenue_usd_m ו/או estimated_eps (מה שצוין בפועל), ו-revenue_growth_pct/eps_growth_pct אם ניתן לחשב ביחס לתקופה המקבילה. אם אין סעיף תחזית כזה בדוח (נפוץ מאוד, במיוחד ל-10-Q), החזירו guidance_estimates כרשימה ריקה [] - אל תמציאו תחזית.
 
 החזירו את הנתונים *אך ורק* כאובייקט JSON תקין (ללא markdown, ללא בלוק קוד, ללא טקסט לפני או אחרי) במבנה המדויק הבא:
 {
@@ -206,12 +208,23 @@ FUNDAMENTALS_EXTRACTION_SYSTEM_PROMPT = """אתה אנליסט פיננסי שת
       "rd_usd_m": 0.0,
       "operating_income_usd_m": 0.0,
       "pretax_income_usd_m": 0.0,
-      "tax_usd_m": 0.0
+      "tax_usd_m": 0.0,
+      "total_assets_usd_m": 0.0,
+      "total_equity_usd_m": 0.0
+    }
+  ],
+  "guidance_estimates": [
+    {
+      "period_label": "לדוגמה Q4 2025",
+      "estimated_revenue_usd_m": 0.0,
+      "estimated_eps": 0.0,
+      "revenue_growth_pct": 0.0,
+      "eps_growth_pct": 0.0
     }
   ]
 }
 
-כל שדה מספרי שאינו ידוע בוודאות מהדוח עצמו צריך להיות null, לא 0. אל תחזירו שום דבר מחוץ לאובייקט ה-JSON."""
+כל שדה מספרי שאינו ידוע בוודאות מהדוח עצמו צריך להיות null, לא 0. אם אין כלל סעיף תחזית/הנחיה בדוח, guidance_estimates צריך להיות רשימה ריקה []. אל תחזירו שום דבר מחוץ לאובייקט ה-JSON."""
 
 
 def extract_financials_from_pdf(
@@ -240,7 +253,7 @@ def extract_financials_from_pdf(
     try:
         message = client.messages.create(
             model=settings.anthropic_model,
-            max_tokens=4096,
+            max_tokens=6000,
             system=FUNDAMENTALS_EXTRACTION_SYSTEM_PROMPT,
             messages=[
                 {

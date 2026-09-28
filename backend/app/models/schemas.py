@@ -900,11 +900,34 @@ class UploadedFinancialPeriod(BaseModel):
     operating_income_usd_m: float | None = None
     pretax_income_usd_m: float | None = None
     tax_usd_m: float | None = None
+    # Balance-sheet totals — not shown anywhere directly, but needed to
+    # derive ROE/ROA (see app/services/derived_multiples.py) when a ticker
+    # has no live/snapshot multiples at all. null when the report doesn't
+    # state them clearly enough to extract (never guessed).
+    total_assets_usd_m: float | None = None
+    total_equity_usd_m: float | None = None
+
+
+# Forward guidance/estimates the report *itself* states (management
+# guidance, outlook section) — distinct from live yfinance analyst-
+# consensus estimates (AnalystEstimateResponse below), but shaped
+# identically so it can serve as a fallback for the same endpoint
+# (GET /{ticker}/estimates) when yfinance has nothing for this ticker.
+class UploadedGuidanceEstimate(BaseModel):
+    period_label: str
+    estimated_revenue_usd_m: float | None = None
+    estimated_eps: float | None = None
+    revenue_growth_pct: float | None = None
+    eps_growth_pct: float | None = None
 
 
 class UploadedFinancialsExtractionResponse(BaseModel):
     company_name_detected: str | None = None
     periods: list[UploadedFinancialPeriod]
+    # Forward guidance found in the report's own outlook/guidance section,
+    # if any — [] when the report doesn't state forward guidance (not an
+    # error, most quarterly filings don't include this).
+    guidance_estimates: list[UploadedGuidanceEstimate] = []
 
 
 class AnalystEstimateResponse(BaseModel):

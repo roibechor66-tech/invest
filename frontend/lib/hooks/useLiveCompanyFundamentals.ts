@@ -37,6 +37,11 @@ export interface LiveMultiples {
   roePct: number | null;
   roaPct: number | null;
   roicPct: number | null;
+  // "live" (yfinance), "snapshot" (last daily scan), or "uploaded"
+  // (derived from a user-uploaded report + a live/snapshot price — see
+  // backend/app/services/derived_multiples.py, for a ticker yfinance
+  // doesn't cover at all).
+  source: "live" | "snapshot" | "uploaded";
 }
 
 export interface LiveFinancialPeriod {
@@ -83,6 +88,7 @@ interface RawMultiples {
   roe_pct: number | null;
   roa_pct: number | null;
   roic_pct: number | null;
+  source?: "live" | "snapshot" | "uploaded";
 }
 
 interface RawFinancialPeriod {
@@ -158,6 +164,7 @@ function toLiveMultiples(raw: RawMultiples): LiveMultiples {
     roePct: raw.roe_pct,
     roaPct: raw.roa_pct,
     roicPct: raw.roic_pct,
+    source: raw.source ?? "live",
   };
 }
 
