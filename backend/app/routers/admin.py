@@ -24,6 +24,18 @@ portfolio_performance.py) for each, all with caching bypassed
 failure (Yahoo has nothing for it, a transient rate-limit, etc.) is
 recorded and skipped — it does not fail the whole scan, and does not
 overwrite that ticker's previous (still real, just older) snapshot.
+
+Also scans the fixed set of ETF symbols behind the "מדדים נבחרים"
+(watched-indices) card's live tags (WATCHED_INDEX_SYMBOLS below) — a
+Finnhub quote only (no fundamentals; that card never showed multiples/
+statements for these). These are the same symbols as
+frontend/lib/live-index-symbols.ts's LIVE_INDEX_SYMBOLS values — kept as
+a duplicated constant here rather than shared, since the frontend file
+isn't importable from Python; if that file's mapping changes, update
+this list too. Before this, that card had live data only for as long as
+a direct Finnhub call kept succeeding, with no DB fallback — any Finnhub
+hiccup made it silently fall back to the mock figures with no "חי" tag,
+rather than a still-real (if stale) number.
 """
 
 from __future__ import annotations
@@ -39,6 +51,17 @@ from app.models.portfolio import PortfolioPosition
 from app.services import fundamentals, market_data, portfolio_performance, snapshot_store
 
 router = APIRouter()
+
+# Keep in sync with frontend/lib/live-index-symbols.ts's LIVE_INDEX_SYMBOLS
+# values (the dict's values, not its keys — the keys are mockIndices ids,
+# not tickers).
+WATCHED_INDEX_SYMBOLS: list[str] = [
+    "SPY", "QQQ",
+    "XLK", "XLF", "XLV", "XLE", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC",
+    "IGV", "CIBR", "SOXX", "AIQ", "DRAM",
+    "INDA", "EEM", "FXI", "EWT", "VNM",
+    "EWZ", "ECH", "ARGT", "GXG", "EPU", "ILF",
+]
 
 
 def _require_admin_secret(x_admin_secret: str | None = Header(default=None)) -> None:
@@ -139,9 +162,21 @@ def refresh_market_data(
         except Exception:
             pass
 
+    watched_index_refreshed: list[str] = []
+    watched_index_failed: list[str] = []
+    for ticker in WATCHED_INDEX_SYMBOLS:
+        try:
+            quote = market_data.get_quote(ticker, use_cache=False)
+            snapshot_store.save_snapshot(db, ticker, "quote", asdict(quote))
+            watched_index_refreshed.append(ticker)
+        except Exception:
+            watched_index_failed.append(ticker)
+
     return {
         "portfolio_tickers_scanned": len(portfolio_tickers),
         "portfolio_tickers_succeeded": succeeded,
         "portfolio_tickers_failed": failed,
         "benchmark_tickers_refreshed": benchmark_refreshed,
+        "watched_index_tickers_refreshed": watched_index_refreshed,
+        "watched_index_tickers_failed": watched_index_failed,
     }
