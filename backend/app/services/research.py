@@ -320,6 +320,18 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
         block.text for block in message.content if getattr(block, "type", None) == "text"
     ).strip()
 
+    stop_reason = getattr(message, "stop_reason", None)
+    if stop_reason == "max_tokens":
+        # The model ran out of output budget mid-answer, so the JSON is cut
+        # off and can never parse — say so plainly instead of the generic
+        # "invalid format" error, and log it so Render's logs show why.
+        print(
+            f"[_extract_json_text] output truncated at max_tokens "
+            f"(raw_len={len(raw_text)}); tail: {raw_text[-300:]!a}",
+            flush=True,
+        )
+        raise ValueError("התשובה של ה-AI נחתכה לפני שהסתיימה (ארוכה מדי) — נסו שוב")
+
     if raw_text.startswith("```"):
         raw_text = raw_text.strip("`")
         if raw_text.lower().startswith("json"):
@@ -332,6 +344,11 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
     try:
         return json.loads(json_candidate)
     except json.JSONDecodeError as exc:
+        print(
+            f"[_extract_json_text] JSON parse failed ({exc}); stop_reason={stop_reason}, "
+            f"raw_len={len(raw_text)}; head: {raw_text[:800]!a}; tail: {raw_text[-800:]!a}",
+            flush=True,
+        )
         raise ValueError("הניתוח שהתקבל אינו בפורמט תקין — נסו שוב") from exc
 
 
