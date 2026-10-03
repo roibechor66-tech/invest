@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Flame,
   Rocket,
@@ -74,6 +74,15 @@ interface StockScannerResult {
   sources: TrendSource[];
   cached_at_iso: string | null;
 }
+
+// POST /api/scanner/scan and GET /api/scanner/scan/status both return this.
+interface StockScannerJob {
+  status: "idle" | "running" | "done" | "error";
+  result: StockScannerResult | null;
+  error_he: string | null;
+}
+
+const SCAN_POLL_INTERVAL_MS = 5000;
 
 function formatUpdatedAt(iso: string | null): string {
   if (!iso) return "";
@@ -177,27 +186,73 @@ export function StockScannerPanel({ onBack }: { onBack: () => void }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StockScannerResult | null>(null);
+  // A fresh scan takes several minutes, so the backend runs it as a
+  // background job and we poll its status instead of holding one request
+  // open. The timer ref lets us stop polling when the panel unmounts.
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMounted = useRef(true);
+
+  function stopPolling() {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+  }
+
+  function finish() {
+    setIsLoading(false);
+    setIsRefreshing(false);
+  }
+
+  function handleJob(job: StockScannerJob) {
+    if (!isMounted.current) return;
+    if (job.status === "done" && job.result) {
+      setResult(job.result);
+      finish();
+    } else if (job.status === "running") {
+      pollTimer.current = setTimeout(poll, SCAN_POLL_INTERVAL_MS);
+    } else if (job.status === "error") {
+      setError(job.error_he ?? "הרצת סורק המניות נכשלה");
+      finish();
+    } else {
+      setError("הסריקה הופסקה (השרת הופעל מחדש) — לחצו \"רענן עכשיו\" כדי להריץ שוב");
+      finish();
+    }
+  }
+
+  async function poll() {
+    try {
+      handleJob(await apiFetch<StockScannerJob>("/api/scanner/scan/status"));
+    } catch (err) {
+      if (!isMounted.current) return;
+      setError(err instanceof ApiError ? err.message : "בדיקת סטטוס הסריקה נכשלה");
+      finish();
+    }
+  }
 
   async function load(force: boolean) {
+    stopPolling();
     if (force) setIsRefreshing(true);
     else setIsLoading(true);
     setError(null);
     try {
-      const data = await apiFetch<StockScannerResult>(
-        `/api/scanner/scan${force ? "?force=true" : ""}`,
-        { method: "POST" }
+      handleJob(
+        await apiFetch<StockScannerJob>(`/api/scanner/scan${force ? "?force=true" : ""}`, {
+          method: "POST",
+        })
       );
-      setResult(data);
     } catch (err) {
+      if (!isMounted.current) return;
       setError(err instanceof ApiError ? err.message : "הרצת סורק המניות נכשלה");
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      finish();
     }
   }
 
   useEffect(() => {
+    isMounted.current = true;
     load(false);
+    return () => {
+      isMounted.current = false;
+      stopPolling();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -218,7 +273,12 @@ export function StockScannerPanel({ onBack }: { onBack: () => void }) {
         ומניות עם זרימת אופציות PUT/CALL חריגה.
       </p>
 
-      {isLoading && !result && <p className="text-sm text-slate-500">מריץ סריקת שוק...</p>}
+      {isLoading && !result && (
+        <p className="text-sm text-slate-500">
+          מריץ סריקת שוק חיה... זה לוקח בדרך כלל 3-5 דקות (חיפושים באינטרנט + ניתוח). הסריקה
+          רצה ברקע — אפשר לסגור את החלון ולחזור אליו מאוחר יותר.
+        </p>
+      )}
 
       {error && <p className="text-sm text-negative">{error}</p>}
 
@@ -236,7 +296,7 @@ export function StockScannerPanel({ onBack }: { onBack: () => void }) {
               className="flex items-center gap-1 text-xs font-medium text-brand-400 hover:text-brand-300 disabled:opacity-50"
             >
               <RefreshCw size={12} className={isRefreshing ? "animate-spin" : ""} />
-              {isRefreshing ? "מרענן..." : "רענן עכשיו"}
+              {isRefreshing ? "מרענן ברקע (כמה דקות)..." : "רענן עכשיו"}
             </button>
           </div>
 

@@ -30,7 +30,7 @@ MAX_UPLOAD_BYTES = 32 * 1024 * 1024  # matches Claude's own PDF document limit
 
 
 @router.post("/analyze-report", response_model=ReportAnalysisResponse)
-async def analyze_financial_report(
+def analyze_financial_report(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ) -> ReportAnalysisResponse:
@@ -48,7 +48,7 @@ async def analyze_financial_report(
             status_code=status.HTTP_400_BAD_REQUEST, detail="יש להעלות קובץ PDF בלבד"
         )
 
-    pdf_bytes = await file.read()
+    pdf_bytes = file.file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="הקובץ שהועלה ריק")
     if len(pdf_bytes) > MAX_UPLOAD_BYTES:
@@ -63,7 +63,7 @@ async def analyze_financial_report(
 
 
 @router.post("/trend-analysis", response_model=TrendAnalysisResponse)
-async def get_trend_analysis(
+def get_trend_analysis(
     current_user: User = Depends(get_current_user),
 ) -> TrendAnalysisResponse:
     """Bot feature: search the live web for white papers, technology/
@@ -81,7 +81,7 @@ async def get_trend_analysis(
 
 
 @router.post("/economic-trends", response_model=EconomicTrendsResponse)
-async def get_economic_trends_endpoint(
+def get_economic_trends_endpoint(
     force: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> EconomicTrendsResponse:
@@ -105,7 +105,7 @@ async def get_economic_trends_endpoint(
 
 
 @router.get("/latest-filing/{ticker}", response_model=LatestFilingInfo)
-async def get_latest_filing(
+def get_latest_filing(
     ticker: str,
     current_user: User = Depends(get_current_user),
 ) -> LatestFilingInfo:
@@ -122,7 +122,7 @@ async def get_latest_filing(
 
 
 @router.post("/analyze-latest-filing/{ticker}", response_model=ReportAnalysisResponse)
-async def analyze_latest_filing_endpoint(
+def analyze_latest_filing_endpoint(
     ticker: str,
     current_user: User = Depends(get_current_user),
 ) -> ReportAnalysisResponse:
@@ -139,7 +139,7 @@ async def analyze_latest_filing_endpoint(
 
 
 @router.post("/thesis/{ticker}", response_model=EquityThesisResponse)
-async def build_thesis_endpoint(
+def build_thesis_endpoint(
     ticker: str, current_user: User = Depends(get_current_user)
 ) -> EquityThesisResponse:
     """"בניית תזה": search the given ticker deeply and build a full
@@ -159,7 +159,7 @@ async def build_thesis_endpoint(
 
 
 @router.post("/weekly-summary/{market}", response_model=WeeklySummaryResponse)
-async def get_weekly_summary_endpoint(
+def get_weekly_summary_endpoint(
     market: str,
     force: bool = False,
     payload: WeeklySummaryRequest | None = None,
@@ -190,7 +190,7 @@ async def get_weekly_summary_endpoint(
 
 
 @router.post("/weekly-summary-portfolio", response_model=PortfolioWeeklySummaryResponse)
-async def get_portfolio_weekly_summary_endpoint(
+def get_portfolio_weekly_summary_endpoint(
     payload: PortfolioWeeklySummaryRequest,
     force: bool = False,
     current_user: User = Depends(get_current_user),
@@ -224,7 +224,7 @@ async def get_portfolio_weekly_summary_endpoint(
 
 
 @router.post("/correlation-explanation", response_model=CorrelationExplanationResponse)
-async def explain_correlation_endpoint(
+def explain_correlation_endpoint(
     payload: CorrelationExplanationRequest,
     current_user: User = Depends(get_current_user),
 ) -> CorrelationExplanationResponse:

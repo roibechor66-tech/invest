@@ -106,7 +106,7 @@ def get_financial_statements_endpoint(
 
 
 @router.post("/{ticker}/upload-report", response_model=list[FinancialPeriodResponse])
-async def upload_report_endpoint(
+def upload_report_endpoint(
     ticker: str,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -130,7 +130,7 @@ async def upload_report_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST, detail="יש להעלות קובץ PDF בלבד"
         )
 
-    pdf_bytes = await file.read()
+    pdf_bytes = file.file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="הקובץ שהועלה ריק")
     if len(pdf_bytes) > MAX_UPLOAD_BYTES:

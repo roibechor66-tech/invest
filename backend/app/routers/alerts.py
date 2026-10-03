@@ -26,24 +26,24 @@ router = APIRouter()
 
 
 @router.get("/preferences", response_model=AlertPreferences)
-async def get_preferences(current_user: User = Depends(get_current_user)) -> AlertPreferences:
+def get_preferences(current_user: User = Depends(get_current_user)) -> AlertPreferences:
     return alerts_service.get_preferences()
 
 
 @router.put("/preferences", response_model=AlertPreferences)
-async def update_preferences(
+def update_preferences(
     prefs: AlertPreferences, current_user: User = Depends(get_current_user)
 ) -> AlertPreferences:
     return alerts_service.save_preferences(prefs)
 
 
 @router.get("/inbox", response_model=list[AlertItem])
-async def get_inbox(current_user: User = Depends(get_current_user)) -> list[AlertItem]:
+def get_inbox(current_user: User = Depends(get_current_user)) -> list[AlertItem]:
     return alerts_service.get_inbox()
 
 
 @router.post("/inbox/{alert_id}/read", response_model=list[AlertItem])
-async def mark_alert_read(
+def mark_alert_read(
     alert_id: str, current_user: User = Depends(get_current_user)
 ) -> list[AlertItem]:
     found = alerts_service.mark_read(alert_id)
@@ -53,14 +53,14 @@ async def mark_alert_read(
 
 
 @router.post("/check", response_model=AlertsCheckResponse)
-async def check_alerts(
+def check_alerts(
     payload: AlertsCheckRequest, current_user: User = Depends(get_current_user)
 ) -> AlertsCheckResponse:
     return alerts_service.check_alerts(payload.tickers)
 
 
 @router.post("/explain-price-move", response_model=PriceMoveExplanationResponse)
-async def explain_price_move(
+def explain_price_move(
     payload: PriceMoveExplanationRequest, current_user: User = Depends(get_current_user)
 ) -> PriceMoveExplanationResponse:
     """For a price-move alert (computed client-side — see check_alerts'

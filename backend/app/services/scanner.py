@@ -22,6 +22,7 @@ real-time insight into anyone's actual current position.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,7 @@ from typing import Any
 from anthropic import Anthropic
 
 from app.core.config import settings
-from app.models.schemas import StockScannerResponse
+from app.models.schemas import StockScannerJobResponse, StockScannerResponse
 from app.services.research import _extract_json_text  # shared response-parsing helper
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -171,3 +172,59 @@ def get_stock_scanner(force_refresh: bool = False) -> StockScannerResponse:
     result = result.model_copy(update={"cached_at_iso": cached_at_iso})
     _write_scanner_cache(result)
     return result
+
+
+# --- Background job -----------------------------------------------------
+# A fresh scan (many web searches + a long Hebrew JSON answer) takes several
+# minutes — far longer than a browser request should hang. So a fresh scan
+# runs in a background thread and the frontend polls get_scan_status().
+# State is per-process memory: if Render restarts the service mid-scan the
+# job is simply lost ("idle"), and the user can start it again.
+
+_job_lock = threading.Lock()
+_job: dict[str, Any] = {"status": "idle", "error_he": None}
+
+
+def _run_scan_job() -> None:
+    try:
+        get_stock_scanner(force_refresh=True)
+        outcome: dict[str, Any] = {"status": "done", "error_he": None}
+    except ValueError as exc:
+        outcome = {"status": "error", "error_he": str(exc)}
+    except Exception as exc:  # never leave the job stuck in "running"
+        print(f"[stock_scanner] background scan crashed: {exc!a}", flush=True)
+        outcome = {"status": "error", "error_he": "סריקת המניות נכשלה — נסו שוב"}
+    with _job_lock:
+        _job.update(outcome)
+
+
+def start_scan(force_refresh: bool = False) -> StockScannerJobResponse:
+    """Serve a fresh cached scan immediately; otherwise start a background
+    scan (unless one is already running) and report "running"."""
+    if not force_refresh:
+        cached = _read_scanner_cache()
+        if cached is not None:
+            return StockScannerJobResponse(status="done", result=cached)
+
+    with _job_lock:
+        if _job["status"] == "running":
+            return StockScannerJobResponse(status="running")
+        _job.update(status="running", error_he=None)
+
+    threading.Thread(target=_run_scan_job, daemon=True).start()
+    return StockScannerJobResponse(status="running")
+
+
+def get_scan_status() -> StockScannerJobResponse:
+    with _job_lock:
+        status, error_he = _job["status"], _job["error_he"]
+
+    if status == "running":
+        return StockScannerJobResponse(status="running")
+    if status == "error":
+        return StockScannerJobResponse(status="error", error_he=error_he)
+
+    cached = _read_scanner_cache()
+    if cached is not None:
+        return StockScannerJobResponse(status="done", result=cached)
+    return StockScannerJobResponse(status="idle")

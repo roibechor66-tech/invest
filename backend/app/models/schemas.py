@@ -750,6 +750,17 @@ class StockScannerResponse(BaseModel):
     cached_at_iso: str | None = None
 
 
+class StockScannerJobResponse(BaseModel):
+    """A scan runs as a background job (it takes minutes): "running" →
+    poll again; "done" → `result` holds the scan; "error" → `error_he`;
+    "idle" → no scan in progress and nothing cached (e.g. the server
+    restarted mid-scan) — start a new one."""
+
+    status: Literal["idle", "running", "done", "error"]
+    result: StockScannerResponse | None = None
+    error_he: str | None = None
+
+
 # --- Portfolio (Phase 3: real, persisted "My Portfolio") -----------------
 
 
