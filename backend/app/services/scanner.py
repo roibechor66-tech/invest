@@ -23,14 +23,22 @@ from __future__ import annotations
 
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from anthropic import Anthropic
 
 from app.core.config import settings
-from app.models.schemas import StockScannerJobResponse, StockScannerResponse
+from app.models.schemas import (
+    OptionsFlowIdea,
+    ScannerStockIdea,
+    StockScannerJobResponse,
+    StockScannerResponse,
+    TrendSource,
+)
 from app.services.research import _extract_json_text  # shared response-parsing helper
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -65,26 +73,114 @@ SCANNER_SYSTEM_PROMPT = """אתם צוות מסחר/מחקר בקרן גידור
 
 לכל מניה בכל הרשימות: ticker אמיתי וקיים, company_name, ו-risk_note_he מפורט (לא רק משפט אחד) עם אזהרת סיכון ספציפית ורלוונטית לאותה מניה/מצב (מניות טרנדיות/מומנטום הן לרוב תנודתיות מאוד - הסבירו למה במקרה הספציפי הזה).
 
-החזירו את הניתוח *אך ורק* כאובייקט JSON תקין (ללא markdown, ללא בלוק קוד, ללא טקסט לפני או אחרי) במבנה המדויק הבא:
-{
-  "generated_at_he": "לדוגמה: 22 בספטמבר 2026, 09:00",
-  "trending": [{"ticker": "AAPL", "company_name": "Apple Inc.", "reason_he": "פסקה מלאה...", "price_action_he": "...", "signal_he": null, "risk_note_he": "פסקה מלאה..."}],
-  "momentum_breakouts": [{"ticker": "...", "company_name": "...", "reason_he": "...", "price_action_he": "...", "signal_he": "פסקה מלאה עם תיאור אות הבאז/המומנטום הספציפי", "risk_note_he": "..."}],
-  "smart_money": [{"ticker": "...", "company_name": "...", "reason_he": "פסקה מלאה...", "price_action_he": null, "signal_he": "13F/Form 4 - פירוט מדויק ותאריך", "risk_note_he": "..."}],
-  "smart_money_methodology_he": "ההסבר הכללי על מגבלות ה-13F/Form 4 כמתואר למעלה",
-  "unusual_options": [{"ticker": "...", "company_name": "...", "flow_type": "call | put", "reason_he": "פסקה מלאה...", "premium_he": "...", "expiration_he": "...", "sentiment_he": "פסקה מלאה...", "risk_note_he": "..."}],
-  "sources": [{"title": "כותרת המקור", "url": "https://..."}]
+כל קריאה אליכם בונה **רשימה אחת בלבד** מתוך הארבע - הודעת המשתמש תציין איזו, ואת מבנה ה-JSON המדויק שיש להחזיר עבורה. השתמשו בהנחיות למעלה עבור אותה רשימה בלבד.
+
+החזירו *אך ורק* אובייקט JSON תקין (ללא markdown, ללא בלוק קוד, ללא טקסט לפני או אחרי), במבנה שמופיע בהודעת המשתמש. אל תחזירו שום דבר מחוץ לאובייקט ה-JSON."""
+
+
+# One Claude call per watchlist, run in parallel. A single call building all
+# four lists (5-6 detailed Hebrew picks each, plus web searches and the
+# model's own thinking, which counts toward max_tokens) kept hitting the
+# max_tokens cap mid-JSON. Per-list calls each get the full budget, and
+# running them concurrently also makes a fresh scan faster.
+SCANNER_MAX_TOKENS_PER_CALL = 16000
+SCANNER_SEARCHES_PER_CALL = 4
+
+_STOCK_IDEA_JSON = (
+    '{"ticker": "...", "company_name": "...", "reason_he": "...", '
+    '"price_action_he": "... או null", "signal_he": "... או null", "risk_note_he": "..."}'
+)
+_SOURCES_JSON = '"sources": [{"title": "כותרת המקור", "url": "https://..."}]'
+
+SCANNER_CATEGORIES: dict[str, dict[str, str]] = {
+    "trending": {
+        "label_he": "1. trending (מניות טרנדיות)",
+        "shape": '{"trending": [' + _STOCK_IDEA_JSON + "], " + _SOURCES_JSON + "}",
+    },
+    "momentum_breakouts": {
+        "label_he": "2. momentum_breakouts (פריצות מומנטום + באז ברשת)",
+        "shape": '{"momentum_breakouts": [' + _STOCK_IDEA_JSON + "], " + _SOURCES_JSON + "}",
+    },
+    "smart_money": {
+        "label_he": "3. smart_money (כסף חכם) - כולל smart_money_methodology_he",
+        "shape": (
+            '{"smart_money": [' + _STOCK_IDEA_JSON + "], "
+            '"smart_money_methodology_he": "ההסבר הכללי על מגבלות ה-13F/Form 4", '
+            + _SOURCES_JSON + "}"
+        ),
+    },
+    "unusual_options": {
+        "label_he": "4. unusual_options (זרימת אופציות חריגה - PUT/CALL)",
+        "shape": (
+            '{"unusual_options": [{"ticker": "...", "company_name": "...", '
+            '"flow_type": "call | put", "reason_he": "...", "premium_he": "...", '
+            '"expiration_he": "...", "sentiment_he": "...", "risk_note_he": "..."}], '
+            + _SOURCES_JSON + "}"
+        ),
+    },
 }
 
-5-6 מניות בכל רשימה , עם פסקאות מלאות ומפורטות בכל שדה טקסט חופשי כמתואר למעלה. וודאו גם רשימת sources עשירה - 6-10 מקורות אמיתיים מהחיפושים שביצעתם. אל תחזירו שום דבר מחוץ לאובייקט ה-JSON."""
+# Shown if the smart-money call fails while the others succeed, so the
+# methodology caveat never silently disappears from the panel.
+DEFAULT_SMART_MONEY_METHODOLOGY_HE = (
+    "אין דרך לראות בזמן אמת מה מחזיקה קרן גידור. האותות כאן ציבוריים ולא מושלמים: "
+    "דיווחי 13F מתפרסמים רבעונית בפיגור של עד 45 יום, ודיווחי Form 4 על רכישות "
+    "מנהלים מתפרסמים תוך כיומיים עסקים. אלה רמזים לבדיקה נוספת, לא מידע פנימי."
+)
+
+
+def _supports_effort(model: str) -> bool:
+    """`output_config.effort` exists on Claude 4.6+ models; older models
+    (e.g. Haiku 4.5, Sonnet 4.5) reject it, and ANTHROPIC_MODEL is
+    configurable on the server."""
+    return model.startswith(
+        ("claude-sonnet-5", "claude-opus-5", "claude-fable", "claude-opus-4-6",
+         "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6")
+    )
+
+
+def _scan_category(client: Anthropic, key: str) -> dict[str, Any]:
+    spec = SCANNER_CATEGORIES[key]
+    extra: dict[str, Any] = {}
+    if _supports_effort(settings.anthropic_model):
+        # Low effort keeps thinking short — this is search-and-summarize
+        # work, and thinking tokens share the max_tokens budget.
+        extra["extra_body"] = {"output_config": {"effort": "low"}}
+
+    try:
+        message = client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=SCANNER_MAX_TOKENS_PER_CALL,
+            system=SCANNER_SYSTEM_PROMPT,
+            tools=[{**SCANNER_WEB_SEARCH_TOOL, "max_uses": SCANNER_SEARCHES_PER_CALL}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"הריצו עכשיו את הרשימה הבאה בלבד: {spec['label_he']}. "
+                        "חפשו באינטרנט כדי לאתר 5-6 מניות אמיתיות ועדכניות, וכתבו לכל "
+                        "שדה טקסט חופשי 2-3 משפטים עם הקשר/מספרים/תאריכים קונקרטיים, "
+                        "כמפורט בהנחיות המערכת עבור רשימה זו. "
+                        f"החזירו אך ורק אובייקט JSON תקין במבנה הזה: {spec['shape']}"
+                    ),
+                }
+            ],
+            **extra,
+        )
+    except Exception as exc:
+        raise ValueError(f"קריאה ל-Claude API נכשלה: {exc}") from exc
+
+    return _extract_json_text(message)
 
 
 def analyze_stock_scanner() -> StockScannerResponse:
-    """Search the live web and build the four scanner watchlists.
+    """Search the live web and build the four scanner watchlists — one
+    Claude call per list, in parallel, merged into one response.
 
-    Real, web-search-backed Claude call — not mock data. Raises
-    ValueError for anything that should surface to the user as a 502
-    (missing API key, a failed API call, malformed model output).
+    Real, web-search-backed Claude calls — not mock data. A list whose
+    call fails comes back empty (logged) as long as at least one list
+    succeeded; if every call fails, raises ValueError with the first
+    error, which surfaces to the user as a scan error.
     """
     if not settings.anthropic_api_key:
         raise ValueError(
@@ -93,43 +189,64 @@ def analyze_stock_scanner() -> StockScannerResponse:
 
     client = Anthropic(api_key=settings.anthropic_api_key)
 
-    try:
-        message = client.messages.create(
-            model=settings.anthropic_model,
-            # 12000 was too small: 4 lists x 7-10 stocks x several Hebrew
-            # paragraphs ran past the cap, so the JSON was cut off mid-object
-            # and the user saw "הניתוח שהתקבל אינו בפורמט תקין". The prompt
-            # now asks for 5-6 stocks per list with shorter paragraphs, and
-            # the budget is raised for headroom.
-            max_tokens=20000,
-            system=SCANNER_SYSTEM_PROMPT,
-            tools=[SCANNER_WEB_SEARCH_TOOL],
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        "הריצו סריקת שוק עכשיו, בצורה עשירה ומפורטת. חפשו "
-                        "באינטרנט כדי לאתר 5-6 מניות טרנדיות אמיתיות "
-                        "(פרוסות על פני כמה סקטורים), 5-6 פריצות מומנטום עם "
-                        "באז אמיתי ברשתות החברתיות, 5-6 סימנים אמיתיים "
-                        "(13F / Form 4) לצבירה מוסדית, ו-5-6 מניות עם זרימת "
-                        "אופציות PUT/CALL חריגה. לכל מניה כתבו הסבר מפורט "
-                        "(פסקה מלאה, לא משפט אחד) עם הקשר/מספרים/תאריכים "
-                        "קונקרטיים, כמפורט בהנחיות המערכת. "
-                        "החזירו אך ורק אובייקט JSON תקין לפי ההנחיות במערכת."
-                    ),
-                }
-            ],
-        )
-    except Exception as exc:
-        raise ValueError(f"קריאה ל-Claude API נכשלה: {exc}") from exc
+    results: dict[str, dict[str, Any]] = {}
+    errors: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=len(SCANNER_CATEGORIES)) as pool:
+        futures = {pool.submit(_scan_category, client, key): key for key in SCANNER_CATEGORIES}
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                results[key] = future.result()
+            except Exception as exc:
+                errors[key] = str(exc)
+                print(f"[stock_scanner] {key} failed: {exc!a}", flush=True)
 
-    data = _extract_json_text(message)
+    if not results:
+        raise ValueError(next(iter(errors.values())))
 
+    lists: dict[str, list[Any]] = {}
+    for key in SCANNER_CATEGORIES:
+        item_model = OptionsFlowIdea if key == "unusual_options" else ScannerStockIdea
+        try:
+            lists[key] = [item_model.model_validate(i) for i in results.get(key, {}).get(key, [])]
+        except Exception as exc:
+            print(f"[stock_scanner] {key} returned an unexpected shape: {exc!a}", flush=True)
+            lists[key] = []
+
+    if not any(lists.values()):
+        raise ValueError("תוצאות הסריקה שהתקבלו אינן תואמות למבנה הצפוי — נסו שוב")
+
+    sources: list[TrendSource] = []
+    seen_urls: set[str] = set()
+    for key in SCANNER_CATEGORIES:
+        for raw in results.get(key, {}).get("sources", []) or []:
+            try:
+                source = TrendSource.model_validate(raw)
+            except Exception:
+                continue
+            if source.url and source.url in seen_urls:
+                continue
+            seen_urls.add(source.url or "")
+            sources.append(source)
+
+    methodology = results.get("smart_money", {}).get("smart_money_methodology_he")
+    return StockScannerResponse(
+        generated_at_he=_now_israel_he(),
+        trending=lists["trending"],
+        momentum_breakouts=lists["momentum_breakouts"],
+        smart_money=lists["smart_money"],
+        smart_money_methodology_he=methodology or DEFAULT_SMART_MONEY_METHODOLOGY_HE,
+        unusual_options=lists["unusual_options"],
+        sources=sources[:15],
+    )
+
+
+def _now_israel_he() -> str:
     try:
-        return StockScannerResponse.model_validate(data)
-    except Exception as exc:
-        raise ValueError("תוצאות הסריקה שהתקבלו אינן תואמות למבנה הצפוי — נסו שוב") from exc
+        now = datetime.now(ZoneInfo("Asia/Jerusalem"))
+    except Exception:  # no tz database on this machine
+        now = datetime.now(timezone.utc)
+    return now.strftime("%d/%m/%Y, %H:%M")
 
 
 def _read_scanner_cache() -> StockScannerResponse | None:
