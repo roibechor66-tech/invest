@@ -114,7 +114,8 @@ def analyze_report(pdf_bytes: bytes, filename: str) -> ReportAnalysisResponse:
     encoded_pdf = base64.standard_b64encode(pdf_bytes).decode("utf-8")
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=4096,
             system=ANALYSIS_SYSTEM_PROMPT,
@@ -251,7 +252,8 @@ def extract_financials_from_pdf(
     ticker_clean = ticker.strip().upper()
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=6000,
             system=FUNDAMENTALS_EXTRACTION_SYSTEM_PROMPT,
@@ -293,6 +295,41 @@ def extract_financials_from_pdf(
         raise ValueError("לא זוהו נתונים פיננסיים ניתנים לחילוץ בדוח שהועלה")
 
     return result
+
+
+# Every Claude call in the app goes through _create_message(). Current
+# models (e.g. claude-sonnet-5) think before answering by default, and
+# thinking tokens count toward max_tokens — at the default effort, a
+# web-search call could spend its whole 8000-token budget thinking and get
+# cut off before writing the JSON (seen in production: 26 visible chars at
+# the cap). So every call gets low effort (shorter thinking; these are
+# search-and-summarize tasks) and a max_tokens floor. max_tokens is only a
+# ceiling — billing counts tokens actually generated — so the floor costs
+# nothing when the answer is short.
+AI_MIN_MAX_TOKENS = 16000
+AI_DEFAULT_EFFORT = "low"
+
+
+def _supports_effort(model: str) -> bool:
+    """`output_config.effort` exists on Claude 4.6+ models; older models
+    (e.g. Haiku 4.5, Sonnet 4.5) reject it, and ANTHROPIC_MODEL is
+    configurable on the server."""
+    return model.startswith(
+        ("claude-sonnet-5", "claude-opus-5", "claude-fable", "claude-opus-4-6",
+         "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6")
+    )
+
+
+def _create_message(client: Anthropic, **kwargs: Any) -> Any:
+    """`client.messages.create(**kwargs)` with the app-wide effort and
+    max_tokens policy above applied. `effort` goes through `extra_body`
+    because the pinned SDK (anthropic 0.40) predates the parameter."""
+    kwargs["max_tokens"] = max(kwargs.get("max_tokens", 0), AI_MIN_MAX_TOKENS)
+    if _supports_effort(kwargs.get("model", "")):
+        extra_body = dict(kwargs.pop("extra_body", None) or {})
+        extra_body.setdefault("output_config", {"effort": AI_DEFAULT_EFFORT})
+        kwargs["extra_body"] = extra_body
+    return client.messages.create(**kwargs)
 
 
 def _extract_json_text(message: Any) -> dict[str, Any]:
@@ -493,7 +530,8 @@ def analyze_latest_filing(ticker: str) -> ReportAnalysisResponse:
     client = Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=4096,
             system=ANALYSIS_SYSTEM_PROMPT,
@@ -572,7 +610,8 @@ def analyze_trends() -> TrendAnalysisResponse:
     client = Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             # 4096 was too low here: this call does live web_search *and*
             # asks for several trends, each with a long details_he (5-8
@@ -640,7 +679,8 @@ def explain_price_move(ticker: str, change_pct: float) -> str:
     client = Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=1024,
             system=PRICE_MOVE_SYSTEM_PROMPT,
@@ -709,7 +749,8 @@ def analyze_economy() -> EconomicTrendsResponse:
     client = Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             # Same fix as analyze_trends() above (CLAUDE.md entry 58) —
             # this is also a web_search-backed, multi-item detailed-JSON
@@ -890,7 +931,8 @@ def build_equity_thesis(ticker: str) -> EquityThesisResponse:
     client = Anthropic(api_key=settings.anthropic_api_key)
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=16000,
             system=THESIS_SYSTEM_PROMPT,
@@ -1082,7 +1124,8 @@ def analyze_weekly_summary(
     )
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=10000,
             system=WEEKLY_SUMMARY_SYSTEM_PROMPT,
@@ -1299,7 +1342,8 @@ def build_portfolio_weekly_summary(holdings: list[dict]) -> PortfolioWeeklySumma
     )
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=12000,
             system=PORTFOLIO_WEEKLY_SUMMARY_SYSTEM_PROMPT,
@@ -1422,7 +1466,8 @@ def explain_correlation(request: CorrelationExplanationRequest) -> CorrelationEx
     )
 
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=1200,
             system=CORRELATION_SYSTEM_PROMPT,

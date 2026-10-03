@@ -39,7 +39,10 @@ from app.models.schemas import (
     StockScannerResponse,
     TrendSource,
 )
-from app.services.research import _extract_json_text  # shared response-parsing helper
+from app.services.research import (  # shared Claude call + response-parsing helpers
+    _create_message,
+    _extract_json_text,
+)
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
 SCANNER_CACHE_PATH = CACHE_DIR / "stock_scanner_cache.json"
@@ -129,26 +132,11 @@ DEFAULT_SMART_MONEY_METHODOLOGY_HE = (
 )
 
 
-def _supports_effort(model: str) -> bool:
-    """`output_config.effort` exists on Claude 4.6+ models; older models
-    (e.g. Haiku 4.5, Sonnet 4.5) reject it, and ANTHROPIC_MODEL is
-    configurable on the server."""
-    return model.startswith(
-        ("claude-sonnet-5", "claude-opus-5", "claude-fable", "claude-opus-4-6",
-         "claude-opus-4-7", "claude-opus-4-8", "claude-sonnet-4-6")
-    )
-
-
 def _scan_category(client: Anthropic, key: str) -> dict[str, Any]:
     spec = SCANNER_CATEGORIES[key]
-    extra: dict[str, Any] = {}
-    if _supports_effort(settings.anthropic_model):
-        # Low effort keeps thinking short — this is search-and-summarize
-        # work, and thinking tokens share the max_tokens budget.
-        extra["extra_body"] = {"output_config": {"effort": "low"}}
-
     try:
-        message = client.messages.create(
+        message = _create_message(
+            client,
             model=settings.anthropic_model,
             max_tokens=SCANNER_MAX_TOKENS_PER_CALL,
             system=SCANNER_SYSTEM_PROMPT,
@@ -165,7 +153,6 @@ def _scan_category(client: Anthropic, key: str) -> dict[str, Any]:
                     ),
                 }
             ],
-            **extra,
         )
     except Exception as exc:
         raise ValueError(f"קריאה ל-Claude API נכשלה: {exc}") from exc
