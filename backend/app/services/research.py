@@ -26,6 +26,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, TypeVar
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 from json_repair import repair_json
@@ -53,14 +55,15 @@ MAX_PDF_BYTES = 32 * 1024 * 1024  # Claude's documented per-document PDF limit
 # GDP, Fed decisions) itself only actually changes on a handful of
 # scheduled release dates a month, never faster than weekly. So instead of
 # re-running the search on every request, we cache the last result on disk
-# for a week and only call Claude again once it's stale (or the caller
+# for 12 hours (a week was too long — users saw stale figures after a new
+# release) and only call Claude again once it's stale (or the caller
 # explicitly asks for a fresh run). This is a simple file-backed cache,
 # not a proper datastore — good enough for a single-process demo backend;
 # a real deployment would use a shared cache/DB so the weekly refresh is
 # consistent across workers.
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
 ECONOMIC_TRENDS_CACHE_PATH = CACHE_DIR / "economic_trends_cache.json"
-ECONOMIC_TRENDS_CACHE_TTL = timedelta(days=7)
+ECONOMIC_TRENDS_CACHE_TTL = timedelta(hours=12)
 
 # Claude's native web_search tool — real, live web search (not mock data),
 # used by every trend/economy/price-move/thesis/weekly-summary bot
@@ -317,6 +320,23 @@ JSON_TEXT_RULES_HE = (
     "השתמשו בגרש בודד ('כך')."
 )
 
+def _current_date_rules_he() -> str:
+    """The model doesn't know today's date on its own (its knowledge stops
+    at its training cutoff), so without this a search for "the latest CPI"
+    or "today's news" can come back with stale figures presented as
+    current. Appended to every system prompt by _create_message."""
+    try:
+        now = datetime.now(ZoneInfo("Asia/Jerusalem"))
+    except Exception:  # no tz database on this machine
+        now = datetime.now(timezone.utc)
+    return (
+        f"\n\nהתאריך והשעה עכשיו (שעון ישראל): {now.strftime('%A %d/%m/%Y, %H:%M')}. "
+        "השתמשו רק בנתונים ובחדשות העדכניים ביותר נכון לתאריך הזה: חפשו לפי התאריך, "
+        "העדיפו פרסומים מהימים האחרונים, וציינו לכל נתון כלכלי ולכל ידיעה את תאריך הפרסום או "
+        "התקופה שהוא מתייחס אליה. אל תציגו נתון או ידיעה ישנים כאילו הם חדשים."
+    )
+
+
 _HEBREW_INNER_QUOTE = re.compile(r'(?<=[֐-׿])"(?=[֐-׿])')
 
 
@@ -326,7 +346,7 @@ def _create_message(client: Anthropic, **kwargs: Any) -> Any:
     `extra_body` because the pinned SDK (anthropic 0.40) predates the
     parameter."""
     if isinstance(kwargs.get("system"), str):
-        kwargs["system"] = kwargs["system"] + JSON_TEXT_RULES_HE
+        kwargs["system"] = kwargs["system"] + _current_date_rules_he() + JSON_TEXT_RULES_HE
     kwargs["max_tokens"] = max(kwargs.get("max_tokens", 0), AI_MIN_MAX_TOKENS)
     if _supports_effort(kwargs.get("model", "")):
         extra_body = dict(kwargs.pop("extra_body", None) or {})
@@ -504,7 +524,93 @@ def _text_length(node: Any) -> int:
     return 0
 
 
+def _field(obj: Any, name: str) -> Any:
+    """Read a field from an SDK object or a plain dict — the pinned SDK
+    (0.40) predates web search, so search blocks arrive as loosely-typed
+    objects whose nested items are plain dicts."""
+    return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+
+
+def _real_source_urls(message: Any) -> list[str]:
+    """Every URL the web_search tool actually returned in this response
+    (search results + citations). These are the only links known to exist."""
+    urls: list[str] = []
+    for block in getattr(message, "content", None) or []:
+        if _field(block, "type") == "web_search_tool_result":
+            for result in _field(block, "content") or []:
+                url = _field(result, "url")
+                if isinstance(url, str):
+                    urls.append(url)
+        for citation in _field(block, "citations") or []:
+            url = _field(citation, "url")
+            if isinstance(url, str):
+                urls.append(url)
+    return urls
+
+
+def _url_key(url: str) -> str:
+    parsed = urlparse(url.strip())
+    host = parsed.netloc.lower().removeprefix("www.")
+    return f"{host}{parsed.path.rstrip('/')}".lower()
+
+
+def _sanitize_urls(data: Any, real_urls: list[str]) -> None:
+    """Models sometimes write a plausible-looking but wrong URL. Keep a link
+    only if it matches a URL the search actually returned (swapping in that
+    exact real URL); otherwise remove it — a source entry ({title, url}) is
+    dropped from its list, a nested source object becomes null, and any
+    other item (a news line, a trend) just loses its link."""
+    real_by_key = {_url_key(u): u for u in real_urls if _url_key(u)}
+
+    def resolve(url: Any) -> str | None:
+        if not isinstance(url, str) or not url.startswith("http"):
+            return None
+        key = _url_key(url)
+        if key in real_by_key:
+            return real_by_key[key]
+        # Same page with a trimmed or extended path (e.g. query/anchor cut).
+        for real_key, real in real_by_key.items():
+            if len(key) > 12 and (real_key.startswith(key) or key.startswith(real_key)) and "/" in key:
+                return real
+        return None
+
+    def is_source(node: dict[str, Any]) -> bool:
+        return set(node) <= {"title", "url"}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, list):
+            for i in range(len(node) - 1, -1, -1):
+                item = node[i]
+                if isinstance(item, dict) and "url" in item:
+                    item["url"] = resolve(item["url"])
+                    if item["url"] is None and is_source(item):
+                        del node[i]
+                        continue
+                walk(item)
+        elif isinstance(node, dict):
+            for key, value in list(node.items()):
+                if isinstance(value, dict) and "url" in value:
+                    value["url"] = resolve(value["url"])
+                    if value["url"] is None and is_source(value):
+                        node[key] = None
+                        continue
+                if key == "url" and not isinstance(value, (dict, list)):
+                    node[key] = resolve(value)
+                else:
+                    walk(value)
+
+    walk(data)
+
+
 def _extract_json_text(message: Any) -> dict[str, Any]:
+    """Parse the model's JSON answer (see _parse_json_answer) and keep only
+    links that really came back from its web searches (_sanitize_urls)."""
+    data = _parse_json_answer(message)
+    _sanitize_urls(data, _real_source_urls(message))
+    return data
+
+
+def _parse_json_answer(message: Any) -> dict[str, Any]:
     """Pull the model's final JSON answer out of a Messages response.
 
     When the `web_search` tool is used, `message.content` interleaves

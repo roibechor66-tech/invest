@@ -70,7 +70,7 @@ function IndicatorIcon({ trend }: { trend: EconomicIndicator["trend"] }) {
 // TrendAnalysisPanel — but since the underlying macro data itself only
 // changes on a handful of scheduled release dates a month (unemployment,
 // CPI, GDP, Fed meetings), re-running the search on every visit would be
-// wasteful: the backend caches the result for a week
+// wasteful: the backend caches the result for 12 hours
 // (app/services/research.py::get_economic_trends), so this panel loads
 // automatically on open (serving that cache most of the time) and offers
 // a manual "רענן עכשיו" to force a fresh live run when wanted.
@@ -116,7 +116,7 @@ export function EconomicTrendsPanel({ onBack }: { onBack: () => void }) {
       <p className="text-sm leading-relaxed text-slate-500">
         ניתוח של מה שמשפיע כרגע על הכלכלה והשווקים האמריקאיים ולאן הם צפויים
         להתקדם, מבוסס על חיפוש אינטרנט חי (נתוני מאקרו, הפדרל ריזרב, סנטימנט
-        צרכנים). מתעדכן אוטומטית פעם בשבוע — ניתן גם לרענן ידנית בכל רגע.
+        צרכנים). מתעדכן אוטומטית כל 12 שעות — ניתן גם לרענן ידנית בכל רגע.
       </p>
 
       {isLoading && !result && (
@@ -228,7 +228,7 @@ export function EconomicTrendsPanel({ onBack }: { onBack: () => void }) {
 
           <p className="text-[11px] leading-relaxed text-slate-500">
             הניתוח מבוסס על חיפוש אינטרנט חי ונוצר אוטומטית על ידי מודל AI —
-            מתעדכן כברירת מחדל פעם בשבוע (ניתן לרענן ידנית בכל רגע). הוא עשוי
+            מתעדכן כברירת מחדל כל 12 שעות (ניתן לרענן ידנית בכל רגע). הוא עשוי
             לכלול טעויות או מקורות חלקיים, אינו ייעוץ השקעות, ואינו תחליף
             לבדיקת נאותות עצמאית.
           </p>

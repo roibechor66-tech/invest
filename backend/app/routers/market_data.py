@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
-from app.models.schemas import FxRateResponse, QuoteResponse
+from app.models.schemas import CompanyNewsItem, FxRateResponse, QuoteResponse
 from app.models.user import User
 from app.services import market_data, snapshot_store
 
@@ -107,3 +107,18 @@ def get_fx_rate_endpoint(current_user: User = Depends(get_current_user)) -> FxRa
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
     return FxRateResponse(base="USD", quote="ILS", rate=rate)
+
+
+@router.get("/news/{ticker}", response_model=list[CompanyNewsItem])
+def get_company_news_endpoint(
+    ticker: str,
+    current_user: User = Depends(get_current_user),
+) -> list[CompanyNewsItem]:
+    """Real recent news for one company (Finnhub), newest first, each with
+    a working link to the publisher's article. Empty list when Finnhub has
+    no coverage for the ticker; 502 only for a missing key / failed call."""
+    try:
+        items = market_data.get_company_news(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+    return [CompanyNewsItem(**vars(item)) for item in items]

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
@@ -52,6 +53,9 @@ _FX_CACHE_TTL_SECONDS = 300
 # shared — see module docstring.
 _quote_cache: dict[str, tuple[float, "Quote"]] = {}
 _fx_cache: dict[str, tuple[float, float]] = {}
+_news_cache: dict[str, tuple[float, list["NewsItem"]]] = {}
+_NEWS_CACHE_TTL_SECONDS = 15 * 60
+_NEWS_LOOKBACK_DAYS = 10
 
 
 @dataclass
@@ -174,7 +178,74 @@ def get_usd_ils_rate(*, use_cache: bool = True) -> float:
     return rate
 
 
+@dataclass
+class NewsItem:
+    headline: str
+    source: str
+    url: str
+    published_at_iso: str
+    summary: str
+
+
+def get_company_news(ticker: str, limit: int = 8) -> list[NewsItem]:
+    """Real recent news for one company from Finnhub's /company-news —
+    actual headlines with their publisher's working article URL, newest
+    first (last ~10 days). Replaces the stock card's fixed mock news, whose
+    links pointed at example.com.
+
+    Finnhub's free tier covers North American companies; for others (e.g.
+    ".TA" tickers) it returns no items, which comes back as an empty list
+    rather than an error. Raises ValueError only for a missing API key or
+    a failed call.
+    """
+    api_key = _require_api_key()
+    ticker = ticker.strip().upper()
+    cached = _news_cache.get(ticker)
+    if cached and time.time() - cached[0] < _NEWS_CACHE_TTL_SECONDS:
+        return cached[1][:limit]
+
+    today = date.today()
+    try:
+        response = httpx.get(
+            f"{FINNHUB_BASE_URL}/company-news",
+            params={
+                "symbol": ticker,
+                "from": (today - timedelta(days=_NEWS_LOOKBACK_DAYS)).isoformat(),
+                "to": today.isoformat(),
+                "token": api_key,
+            },
+            timeout=10.0,
+        )
+        response.raise_for_status()
+        raw = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ValueError(f"שליפת חדשות מ-Finnhub נכשלה: {exc}") from exc
+
+    items: list[NewsItem] = []
+    seen: set[str] = set()
+    for entry in sorted(raw if isinstance(raw, list) else [], key=lambda e: e.get("datetime") or 0, reverse=True):
+        headline = (entry.get("headline") or "").strip()
+        url = (entry.get("url") or "").strip()
+        timestamp = entry.get("datetime")
+        if not headline or not url.startswith("http") or not timestamp or headline.lower() in seen:
+            continue
+        seen.add(headline.lower())
+        items.append(
+            NewsItem(
+                headline=headline,
+                source=(entry.get("source") or "").strip(),
+                url=url,
+                published_at_iso=datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat(),
+                summary=(entry.get("summary") or "").strip(),
+            )
+        )
+
+    _news_cache[ticker] = (time.time(), items)
+    return items[:limit]
+
+
 def clear_cache() -> None:
     """Test/debug helper — not called from the running app itself."""
     _quote_cache.clear()
     _fx_cache.clear()
+    _news_cache.clear()

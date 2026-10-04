@@ -830,6 +830,14 @@ class CashDepositCreate(BaseModel):
 
 
 # Phase 3, second track: live market data (app/services/market_data.py).
+class CompanyNewsItem(BaseModel):
+    headline: str
+    source: str
+    url: str
+    published_at_iso: str
+    summary: str
+
+
 class QuoteResponse(BaseModel):
     ticker: str
     price: float

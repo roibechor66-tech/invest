@@ -9,6 +9,7 @@ import { FinancialsBarChart } from "@/components/dashboard/tools/FinancialsBarCh
 import { IncomeStatementFlow } from "@/components/dashboard/tools/IncomeStatementFlow";
 import { buildCompanyFinancialStatements } from "@/lib/mock-data/financial-statements";
 import { useLiveQuote } from "@/lib/hooks/useLiveQuote";
+import { formatNewsAgeHe, useCompanyNews } from "@/lib/hooks/useCompanyNews";
 import { useLiveCompanyFundamentals } from "@/lib/hooks/useLiveCompanyFundamentals";
 import { apiFetch, ApiError } from "@/lib/api";
 
@@ -194,8 +195,11 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
     setActiveMetric((current) => (current === key ? null : key));
   }
 
-  const visibleNews = newsExpanded ? detail.news : detail.news.slice(0, NEWS_PREVIEW_COUNT);
-  const hasMoreNews = detail.news.length > NEWS_PREVIEW_COUNT;
+  // Real company news (Finnhub) with working article links — not the
+  // fixed mock items in detail.news, whose links went to example.com.
+  const companyNews = useCompanyNews(detail.ticker);
+  const visibleNews = newsExpanded ? companyNews.news : companyNews.news.slice(0, NEWS_PREVIEW_COUNT);
+  const hasMoreNews = companyNews.news.length > NEWS_PREVIEW_COUNT;
 
   const valuationKeys: MultipleKey[] = ["peRatio", "forwardPeRatio", "evEbitda", "priceToSales"];
   const profitabilityKeys: MultipleKey[] = ["roiPct", "roePct", "roaPct"];
@@ -551,6 +555,15 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
             reveals the rest. */}
         <div className="mt-6">
           <h4 className="text-sm font-bold text-slate-800">חדשות אחרונות</h4>
+          {companyNews.isLoading && <p className="mt-2 text-xs text-slate-500">טוען חדשות עדכניות...</p>}
+          {!companyNews.isLoading && companyNews.error && (
+            <p className="mt-2 text-xs text-slate-500">לא ניתן לטעון חדשות כרגע: {companyNews.error}</p>
+          )}
+          {!companyNews.isLoading && !companyNews.error && companyNews.news.length === 0 && (
+            <p className="mt-2 text-xs text-slate-500">
+              לא נמצאו חדשות מ-10 הימים האחרונים לנייר הזה (מקור החדשות מכסה בעיקר חברות הנסחרות בארה״ב).
+            </p>
+          )}
           <div className="mt-2 space-y-2">
             {visibleNews.map((item, i) => (
               <a
@@ -561,9 +574,9 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
                 className="flex items-start justify-between gap-3 rounded-lg border border-surface-border bg-surface-raised p-3 hover:border-brand-500/50"
               >
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{item.titleHe}</p>
+                  <p className="text-sm font-medium text-slate-800" dir="auto">{item.headline}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {item.source} · {item.dateHe}
+                    {item.source} · {formatNewsAgeHe(item.publishedAtIso)}
                   </p>
                 </div>
                 <ExternalLink size={14} className="mt-1 shrink-0 text-slate-500" />
@@ -581,7 +594,7 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
               ) : (
                 <>
                   <MoreHorizontal size={16} />
-                  <span>עוד כתבות ({detail.news.length - NEWS_PREVIEW_COUNT})</span>
+                  <span>עוד כתבות ({companyNews.news.length - NEWS_PREVIEW_COUNT})</span>
                 </>
               )}
             </button>
@@ -589,11 +602,11 @@ export function StockDetailModal({ detail, onClose }: StockDetailModalProps) {
         </div>
 
         <p className="mt-5 text-xs text-slate-500">
-          מחיר, מכפילים, מדדי רווחיות, תחזיות אנליסטים ודוחות כספיים מוצגים
-          כנתונים חיים (Finnhub / Yahoo Finance) כשזמינים, עם תיוג &quot;(דמו)&quot;
-          מפורש בכל מקום שבו נופלים בחזרה לנתון דמו כי מקור הנתונים אינו
-          מכסה את הנייר הזה. ממוצעי הענף, מגמת המכפילים הרבעונית, שלב
-          Weinstein, התזות והחדשות נשארים נתוני דמו להדגמת המסך.
+          מחיר, חדשות, מכפילים, מדדי רווחיות, תחזיות אנליסטים ודוחות כספיים
+          מוצגים כנתונים חיים (Finnhub / Yahoo Finance) כשזמינים, עם תיוג
+          &quot;(דמו)&quot; מפורש בכל מקום שבו נופלים בחזרה לנתון דמו כי מקור
+          הנתונים אינו מכסה את הנייר הזה. ממוצעי הענף, מגמת המכפילים
+          הרבעונית, שלב Weinstein והתזות נשארים נתוני דמו להדגמת המסך.
         </p>
       </div>
     </div>
