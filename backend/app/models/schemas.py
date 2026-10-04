@@ -674,7 +674,7 @@ class PortfolioWeeklySummaryRequest(BaseModel):
 class PortfolioWeeklySummaryResponse(BaseModel):
     week_range_he: str
     generated_at_he: str
-    overall_return_pct: float
+    overall_return_pct: float | None = None  # unused by the UI (it shows overall_return_he); optional so a missing number never sinks the whole summary
     overall_return_he: str
     benchmark_comparison_he: str
     """How the portfolio's weekly return compares to a relevant benchmark

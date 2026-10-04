@@ -42,6 +42,7 @@ from app.models.schemas import (
 from app.services.research import (  # shared Claude call + response-parsing helpers
     _create_message,
     _extract_json_text,
+    _validate_ai,
 )
 
 CACHE_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -194,11 +195,14 @@ def analyze_stock_scanner() -> StockScannerResponse:
     lists: dict[str, list[Any]] = {}
     for key in SCANNER_CATEGORIES:
         item_model = OptionsFlowIdea if key == "unusual_options" else ScannerStockIdea
-        try:
-            lists[key] = [item_model.model_validate(i) for i in results.get(key, {}).get(key, [])]
-        except Exception as exc:
-            print(f"[stock_scanner] {key} returned an unexpected shape: {exc!a}", flush=True)
-            lists[key] = []
+        raw_items = results.get(key, {}).get(key, [])
+        lists[key] = []
+        for raw_item in raw_items if isinstance(raw_items, list) else []:
+            # One malformed pick is skipped, not the whole list.
+            try:
+                lists[key].append(_validate_ai(item_model, raw_item))
+            except ValueError:
+                print(f"[stock_scanner] {key}: skipped an unusable item", flush=True)
 
     if not any(lists.values()):
         raise ValueError("תוצאות הסריקה שהתקבלו אינן תואמות למבנה הצפוי — נסו שוב")

@@ -25,9 +25,10 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
+from pydantic import BaseModel, ValidationError
 from anthropic import Anthropic
 
 from app.core.config import settings
@@ -145,24 +146,10 @@ def analyze_report(pdf_bytes: bytes, filename: str) -> ReportAnalysisResponse:
     except Exception as exc:  # network/auth/rate-limit errors from the SDK
         raise ValueError(f"קריאה ל-Claude API נכשלה: {exc}") from exc
 
-    raw_text = "".join(
-        block.text for block in message.content if getattr(block, "type", None) == "text"
-    ).strip()
-
-    # The model is instructed to return raw JSON, but strip an accidental
-    # ```json fence defensively rather than fail on an otherwise-good reply.
-    if raw_text.startswith("```"):
-        raw_text = raw_text.strip("`")
-        if raw_text.lower().startswith("json"):
-            raw_text = raw_text[4:].strip()
+    data = _extract_json_text(message)
 
     try:
-        data: dict[str, Any] = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        raise ValueError("הניתוח שהתקבל אינו בפורמט תקין — נסו שוב") from exc
-
-    try:
-        return ReportAnalysisResponse.model_validate(data)
+        return _validate_ai(ReportAnalysisResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -287,7 +274,7 @@ def extract_financials_from_pdf(
     data = _extract_json_text(message)
 
     try:
-        result = UploadedFinancialsExtractionResponse.model_validate(data)
+        result = _validate_ai(UploadedFinancialsExtractionResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("הנתונים שחולצו אינם תואמים למבנה הצפוי — נסו שוב") from exc
 
@@ -330,6 +317,129 @@ def _create_message(client: Anthropic, **kwargs: Any) -> Any:
         extra_body.setdefault("output_config", {"effort": AI_DEFAULT_EFFORT})
         kwargs["extra_body"] = extra_body
     return client.messages.create(**kwargs)
+
+
+_ModelT = TypeVar("_ModelT", bound=BaseModel)
+
+
+def _get_at(data: Any, loc: tuple[Any, ...]) -> Any:
+    for key in loc:
+        data = data[key]
+    return data
+
+
+def _set_at(data: Any, loc: tuple[Any, ...], value: Any) -> None:
+    _get_at(data, loc[:-1])[loc[-1]] = value
+
+
+def _repair_value(error: dict[str, Any]) -> tuple[bool, Any]:
+    """Best-effort fix for one pydantic error on AI output. Returns
+    (fixed, new_value). Missing fields start as "" — if the field turns out
+    to be a list or object, the next pass sees list_type/model_type on ""
+    and converts it again."""
+    kind, value = error["type"], error.get("input")
+    if kind == "missing":
+        return True, ""
+    if kind == "string_type":
+        if value is None:
+            return True, ""
+        if isinstance(value, list):
+            return True, ", ".join(str(v) for v in value)
+        if isinstance(value, dict):
+            return True, " ".join(str(v) for v in value.values())
+        return True, str(value)
+    if kind == "list_type":
+        if value in (None, ""):
+            return True, []
+        return True, [value]
+    if kind in ("model_type", "dict_type", "model_attributes_type"):
+        # A broken list item is dropped by the caller. Otherwise try null
+        # first (fine for an optional object); if the object is required,
+        # null fails again and becomes {} so its fields get filled in.
+        if isinstance(error["loc"][-1], int):
+            return False, value
+        return True, {} if value is None else None
+    if kind in ("float_parsing", "float_type", "int_parsing", "int_type"):
+        # "+3.2%" / "1,250" -> the number; never invent one. A required
+        # number with nothing to parse gets its list item dropped.
+        if isinstance(value, str):
+            number = re.search(r"-?\d+(?:\.\d+)?", value.replace(",", ""))
+            if number:
+                parsed = float(number.group())
+                return True, int(parsed) if kind.startswith("int") else parsed
+        if value is None:
+            return False, value
+        return True, None
+    if kind == "literal_error":
+        allowed = re.findall(r"'([^']*)'", str(error.get("ctx", {}).get("expected", "")))
+        if not allowed:
+            return False, value
+        text = str(value or "").lower()
+        # e.g. "bottleneck | technology" -> "bottleneck"; else the first option
+        match = next((a for a in allowed if a.lower() in text), None)
+        return True, match or allowed[0]
+    if kind in ("bool_type", "bool_parsing"):
+        return True, bool(value)
+    return False, value
+
+
+def _validate_ai(model_cls: type[_ModelT], data: Any) -> _ModelT:
+    """Validate a model's JSON answer against `model_cls`, tolerating the
+    small deviations models make (null instead of text, a missing field, a
+    category spelled slightly off, a single item instead of a list).
+
+    Repairs field-by-field for a few passes; whatever still fails inside a
+    list item gets that one item dropped instead of rejecting the whole
+    answer. Every repair is logged so production logs show what drifted.
+    Raises ValueError only if the answer still can't be made valid.
+    """
+    data = json.loads(json.dumps(data))  # private, mutable copy
+    for attempt in range(6):
+        try:
+            return model_cls.model_validate(data)
+        except ValidationError as exc:
+            errors = exc.errors()
+        print(
+            f"[_validate_ai] {model_cls.__name__} pass {attempt}: "
+            + "; ".join(f"{'.'.join(map(str, e['loc']))}={e['type']}" for e in errors[:20]),
+            flush=True,
+        )
+        if not isinstance(data, dict):
+            break
+
+        progressed = False
+        drop: dict[tuple[Any, ...], set[int]] = {}
+        for error in errors:
+            loc = tuple(error["loc"])
+            fixed, value = (False, None) if attempt >= 4 else _repair_value(error)
+            if fixed:
+                try:
+                    _set_at(data, loc, value)
+                    progressed = True
+                    continue
+                except (KeyError, IndexError, TypeError):
+                    pass
+            # Unfixable: drop the innermost list item that contains it.
+            for i in range(len(loc) - 1, -1, -1):
+                if isinstance(loc[i], int):
+                    drop.setdefault(loc[:i], set()).add(loc[i])
+                    break
+
+        for list_loc, indexes in drop.items():
+            try:
+                items = _get_at(data, list_loc)
+            except (KeyError, IndexError, TypeError):
+                continue
+            if isinstance(items, list):
+                for i in sorted(indexes, reverse=True):
+                    if i < len(items):
+                        del items[i]
+                        progressed = True
+
+        if not progressed:
+            break
+
+    raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב")
 
 
 def _extract_json_text(message: Any) -> dict[str, Any]:
@@ -555,7 +665,7 @@ def analyze_latest_filing(ticker: str) -> ReportAnalysisResponse:
     data = _extract_json_text(message)
 
     try:
-        return ReportAnalysisResponse.model_validate(data)
+        return _validate_ai(ReportAnalysisResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -646,7 +756,7 @@ def analyze_trends() -> TrendAnalysisResponse:
     data = _extract_json_text(message)
 
     try:
-        return TrendAnalysisResponse.model_validate(data)
+        return _validate_ai(TrendAnalysisResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -777,7 +887,7 @@ def analyze_economy() -> EconomicTrendsResponse:
     data = _extract_json_text(message)
 
     try:
-        return EconomicTrendsResponse.model_validate(data)
+        return _validate_ai(EconomicTrendsResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -957,7 +1067,7 @@ def build_equity_thesis(ticker: str) -> EquityThesisResponse:
     data = _extract_json_text(message)
 
     try:
-        return EquityThesisResponse.model_validate(data)
+        return _validate_ai(EquityThesisResponse, data)
     except Exception as exc:
         raise ValueError("התזה שהתקבלה אינה תואמת למבנה הצפוי — נסו שוב") from exc
 
@@ -1153,7 +1263,7 @@ def analyze_weekly_summary(
     data.setdefault("market_label_he", market_config["label_he"])
 
     try:
-        return WeeklySummaryResponse.model_validate(data)
+        return _validate_ai(WeeklySummaryResponse, data)
     except Exception as exc:
         raise ValueError("הסיכום שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -1367,7 +1477,7 @@ def build_portfolio_weekly_summary(holdings: list[dict]) -> PortfolioWeeklySumma
 
     data = _extract_json_text(message)
     try:
-        return PortfolioWeeklySummaryResponse.model_validate(data)
+        return _validate_ai(PortfolioWeeklySummaryResponse, data)
     except Exception as exc:
         raise ValueError("הסיכום שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc
 
@@ -1478,6 +1588,6 @@ def explain_correlation(request: CorrelationExplanationRequest) -> CorrelationEx
 
     data = _extract_json_text(message)
     try:
-        return CorrelationExplanationResponse.model_validate(data)
+        return _validate_ai(CorrelationExplanationResponse, data)
     except Exception as exc:  # pydantic ValidationError
         raise ValueError("ההסבר שהתקבל אינו תואם למבנה הצפוי — נסו שוב") from exc

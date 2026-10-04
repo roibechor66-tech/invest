@@ -98,7 +98,7 @@ interface PortfolioCorrelationInsight {
 interface PortfolioWeeklySummaryResult {
   week_range_he: string;
   generated_at_he: string;
-  overall_return_pct: number;
+  overall_return_pct: number | null;
   overall_return_he: string;
   benchmark_comparison_he: string;
   summary_he: string;

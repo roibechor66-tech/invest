@@ -41,7 +41,10 @@ export async function apiFetch<T>(
     let detail = "אירעה שגיאה בפנייה לשרת";
     try {
       const body = await response.json();
-      detail = body.detail ?? detail;
+      // FastAPI's own 422 validation errors send `detail` as an array of
+      // objects — rendering that as a message would crash React, so only
+      // a string detail is shown.
+      if (typeof body.detail === "string") detail = body.detail;
     } catch {
       // response had no JSON body; keep the default message
     }
