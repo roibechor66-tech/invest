@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 import httpx
+from json_repair import repair_json
 from pydantic import BaseModel, ValidationError
 from anthropic import Anthropic
 
@@ -307,10 +308,25 @@ def _supports_effort(model: str) -> bool:
     )
 
 
+# Appended to every system prompt. Hebrew abbreviations use a plain double
+# quote (ארה"ב), which breaks a JSON string; asking for the gershayim (״)
+# prevents most cases, and _extract_json_text repairs the rest.
+JSON_TEXT_RULES_HE = (
+    "\n\nכלל פורמט מחייב: בתוך ערכי טקסט ב-JSON אל תשתמשו במירכאות כפולות רגילות (\"). "
+    "בקיצורים כתבו גרשיים עבריים (ארה״ב, ת״א, מו״פ, בע״מ), ולציטוט או הדגשה של ביטוי "
+    "השתמשו בגרש בודד ('כך')."
+)
+
+_HEBREW_INNER_QUOTE = re.compile(r'(?<=[֐-׿])"(?=[֐-׿])')
+
+
 def _create_message(client: Anthropic, **kwargs: Any) -> Any:
-    """`client.messages.create(**kwargs)` with the app-wide effort and
-    max_tokens policy above applied. `effort` goes through `extra_body`
-    because the pinned SDK (anthropic 0.40) predates the parameter."""
+    """`client.messages.create(**kwargs)` with the app-wide effort,
+    max_tokens and JSON-text policy above applied. `effort` goes through
+    `extra_body` because the pinned SDK (anthropic 0.40) predates the
+    parameter."""
+    if isinstance(kwargs.get("system"), str):
+        kwargs["system"] = kwargs["system"] + JSON_TEXT_RULES_HE
     kwargs["max_tokens"] = max(kwargs.get("max_tokens", 0), AI_MIN_MAX_TOKENS)
     if _supports_effort(kwargs.get("model", "")):
         extra_body = dict(kwargs.pop("extra_body", None) or {})
@@ -491,12 +507,33 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
     try:
         return json.loads(json_candidate)
     except json.JSONDecodeError as exc:
-        print(
-            f"[_extract_json_text] JSON parse failed ({exc}); stop_reason={stop_reason}, "
-            f"raw_len={len(raw_text)}; head: {raw_text[:800]!a}; tail: {raw_text[-800:]!a}",
-            flush=True,
-        )
-        raise ValueError("הניתוח שהתקבל אינו בפורמט תקין — נסו שוב") from exc
+        first_error = exc
+
+    # Hebrew abbreviations are written with a plain double quote (ארה"ב,
+    # ת"א, מו"פ) — inside a JSON string that quote ends the string mid-word.
+    # A quote between two Hebrew letters is never JSON syntax, so turning it
+    # into the Hebrew gershayim (״) is always safe.
+    candidate = _HEBREW_INNER_QUOTE.sub("״", json_candidate)
+    try:
+        data = json.loads(candidate)
+        print("[_extract_json_text] repaired Hebrew abbreviation quotes", flush=True)
+        return data
+    except json.JSONDecodeError:
+        pass
+
+    # Last resort for any other breakage (an unescaped quote around a
+    # quoted phrase, a missing comma, ...).
+    repaired = repair_json(candidate, return_objects=True)
+    if isinstance(repaired, dict) and repaired:
+        print(f"[_extract_json_text] repaired malformed JSON ({first_error})", flush=True)
+        return repaired
+
+    print(
+        f"[_extract_json_text] JSON parse failed ({first_error}); stop_reason={stop_reason}, "
+        f"raw_len={len(raw_text)}; head: {raw_text[:800]!a}; tail: {raw_text[-800:]!a}",
+        flush=True,
+    )
+    raise ValueError("הניתוח שהתקבל אינו בפורמט תקין — נסו שוב") from first_error
 
 
 # --- Automated report analysis: real SEC EDGAR filing lookup ---------------

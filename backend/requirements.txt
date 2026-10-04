@@ -33,6 +33,9 @@ python-multipart==0.0.9
 # equity-thesis builder, and the stock scanner. Requires a paid
 # ANTHROPIC_API_KEY (console.anthropic.com) — see README.md.
 anthropic==0.40.0
+# Repairs malformed JSON from the model (e.g. an unescaped quote) — see
+# _extract_json_text in app/services/research.py.
+json-repair==0.30.0
 # Replaces Financial Modeling Prep (FMP) for financials/multiples/
 # historical prices (app/services/fundamentals.py, portfolio_performance.py)
 # — free, no API key needed, pulls from Yahoo Finance. Pulls in pandas as
