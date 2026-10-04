@@ -32,10 +32,20 @@ export async function apiFetch<T>(
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    // No HTTP response at all: the connection dropped — typically the
+    // server restarting mid-request (a deploy) or waking from sleep.
+    throw new ApiError(
+      "החיבור לשרת נותק (ייתכן שהשרת התעדכן או התעורר כרגע) — נסו שוב בעוד דקה",
+      0
+    );
+  }
 
   if (!response.ok) {
     let detail = "אירעה שגיאה בפנייה לשרת";
