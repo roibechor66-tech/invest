@@ -294,7 +294,7 @@ def extract_financials_from_pdf(
 # search-and-summarize tasks) and a max_tokens floor. max_tokens is only a
 # ceiling — billing counts tokens actually generated — so the floor costs
 # nothing when the answer is short.
-AI_MIN_MAX_TOKENS = 16000
+AI_MIN_MAX_TOKENS = 20000
 AI_DEFAULT_EFFORT = "low"
 
 
@@ -458,6 +458,52 @@ def _validate_ai(model_cls: type[_ModelT], data: Any) -> _ModelT:
     raise ValueError("הניתוח שהתקבל אינו תואם למבנה הצפוי — נסו שוב")
 
 
+def _drop_trailing_partial_item(data: Any) -> None:
+    """In JSON cut off mid-answer, the item being written when generation
+    stopped is the last element of the last list along the document's tail.
+    Remove it, since its text is incomplete."""
+    last_list = None
+    node = data
+    while isinstance(node, (dict, list)) and node:
+        if isinstance(node, list):
+            last_list = node
+            node = node[-1]
+        else:
+            node = node[next(reversed(node))]
+    if last_list and isinstance(last_list[-1], dict):
+        last_list.pop()
+
+
+def _salvage_truncated_json(raw_text: str) -> dict[str, Any] | None:
+    start = raw_text.find("{")
+    if start == -1:
+        return None
+    candidate = raw_text[start:]
+    if candidate.endswith("```"):
+        candidate = candidate[:-3]
+    candidate = _HEBREW_INNER_QUOTE.sub("״", candidate)
+    repaired = repair_json(candidate, return_objects=True)
+    if not isinstance(repaired, dict) or not repaired:
+        return None
+    _drop_trailing_partial_item(repaired)
+    # Cut off almost immediately → too little to show as a real answer;
+    # a clear "too long, try again" error is better than an empty result.
+    has_items = any(isinstance(v, list) and v for v in repaired.values())
+    if not has_items and _text_length(repaired) < 200:
+        return None
+    return repaired
+
+
+def _text_length(node: Any) -> int:
+    if isinstance(node, str):
+        return len(node)
+    if isinstance(node, dict):
+        return sum(_text_length(v) for v in node.values())
+    if isinstance(node, list):
+        return sum(_text_length(v) for v in node)
+    return 0
+
+
 def _extract_json_text(message: Any) -> dict[str, Any]:
     """Pull the model's final JSON answer out of a Messages response.
 
@@ -485,14 +531,18 @@ def _extract_json_text(message: Any) -> dict[str, Any]:
 
     stop_reason = getattr(message, "stop_reason", None)
     if stop_reason == "max_tokens":
-        # The model ran out of output budget mid-answer, so the JSON is cut
-        # off and can never parse — say so plainly instead of the generic
-        # "invalid format" error, and log it so Render's logs show why.
+        # The model ran out of output budget mid-answer. Rather than lose the
+        # whole answer, close the cut-off JSON and drop the one item that was
+        # being written when it stopped; everything before it is complete.
         print(
             f"[_extract_json_text] output truncated at max_tokens "
             f"(raw_len={len(raw_text)}); tail: {raw_text[-300:]!a}",
             flush=True,
         )
+        salvaged = _salvage_truncated_json(raw_text)
+        if salvaged is not None:
+            print("[_extract_json_text] salvaged the complete part of a truncated answer", flush=True)
+            return salvaged
         raise ValueError("התשובה של ה-AI נחתכה לפני שהסתיימה (ארוכה מדי) — נסו שוב")
 
     if raw_text.startswith("```"):

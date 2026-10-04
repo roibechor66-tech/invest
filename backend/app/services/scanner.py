@@ -87,7 +87,7 @@ SCANNER_SYSTEM_PROMPT = """אתם צוות מסחר/מחקר בקרן גידור
 # model's own thinking, which counts toward max_tokens) kept hitting the
 # max_tokens cap mid-JSON. Per-list calls each get the full budget, and
 # running them concurrently also makes a fresh scan faster.
-SCANNER_MAX_TOKENS_PER_CALL = 16000
+SCANNER_MAX_TOKENS_PER_CALL = 20000
 SCANNER_SEARCHES_PER_CALL = 4
 
 _STOCK_IDEA_JSON = (
