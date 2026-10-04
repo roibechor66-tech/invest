@@ -982,3 +982,62 @@ class PortfolioPerformanceResponse(BaseModel):
     # user so a skewed/partial number isn't mistaken for the full picture.
     skipped_tickers: list[str]
     unavailable_benchmarks: list[str]
+
+
+# --- AI bot: daily / weekly market briefs (real-time web search) ----------
+# Replaces the brief screens' fixed mock content (frontend
+# lib/mock-data/bot-briefs.ts) with a real web-search-backed Claude call per
+# brief kind and market — see app/services/briefs.py.
+
+
+class BriefNewsItem(BaseModel):
+    text_he: str
+    source_name: str | None = None
+    url: str | None = None
+    ticker: str | None = None
+
+
+class BriefIndexReturn(BaseModel):
+    label_he: str
+    return_pct: float | None = None
+    level_he: str | None = None
+
+
+class BriefCalendarEvent(BaseModel):
+    when_he: str
+    label_he: str
+    importance: Literal["high", "medium"] = "medium"
+
+
+class BriefSectorReturn(BaseModel):
+    label_he: str
+    return_pct: float | None = None
+
+
+class MarketBriefResponse(BaseModel):
+    """`summary_a_he`/`summary_b_he` are "what happened yesterday" / "what's
+    expected today" for a daily brief, and "what's coming this week" /
+    "what to watch" for a weekly one."""
+
+    kind: Literal["daily", "weekly"]
+    market: Literal["portfolio", "il", "us", "asia"]
+    generated_at_he: str
+    as_of_he: str
+    summary_a_he: str
+    summary_b_he: str
+    top_headline: BriefNewsItem | None = None
+    index_returns: list[BriefIndexReturn] = []
+    calendar: list[BriefCalendarEvent] = []
+    top_sectors: list[BriefSectorReturn] = []
+    deals_and_companies: list[BriefNewsItem] = []
+    top_voice_theme_he: str | None = None
+    company_news: list[BriefNewsItem] = []
+    sources: list[TrendSource] = []
+    cached_at_iso: str | None = None
+
+
+class BriefRequest(BaseModel):
+    """The user's current portfolio tickers (holdings live per user in the
+    DB, but the frontend already has them, same as WeeklySummaryRequest)."""
+
+    portfolio_tickers: list[str] = []
