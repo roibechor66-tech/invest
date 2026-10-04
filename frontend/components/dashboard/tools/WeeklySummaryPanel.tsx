@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api";
 import { usePortfolio } from "@/lib/portfolio-context";
+import { returnColorFor } from "@/lib/return-direction";
 
 type MarketId = "israel" | "us" | "asia" | "commodities";
 type ViewId = MarketId | "portfolio";
@@ -121,11 +122,6 @@ const MARKETS: { id: MarketId; label: string; icon: typeof Landmark; blurb: stri
 
 const PORTFOLIO_VIEW = { id: "portfolio" as const, label: "התיק שלי", icon: Wallet, blurb: "ביצועי התיק שלכם, מניה-מניה, ומסקנות אישיות" };
 
-function sentimentColor(sentiment: PortfolioWeeklyHolding["sentiment"]): string {
-  if (sentiment === "positive") return "text-positive";
-  if (sentiment === "negative") return "text-negative";
-  return "text-slate-500";
-}
 
 function formatUpdatedAt(iso: string | null): string {
   if (!iso) return "";
@@ -142,9 +138,6 @@ function formatUpdatedAt(iso: string | null): string {
   }
 }
 
-function returnColor(pct: string): string {
-  return pct.trim().startsWith("-") ? "text-negative" : "text-positive";
-}
 
 // "סיכום שבועי": the person picks one of four markets (ישראל / ארה"ב —
 // כולל ביטקוין ואת'ריום / אסיה / סחורות) and gets a structured weekly
@@ -313,7 +306,7 @@ export function WeeklySummaryPanel() {
             <div className="rounded-lg border border-surface-border bg-surface-card p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs text-slate-500">תשואה שבועית משוקללת</span>
-                <span className={`text-lg font-bold ${returnColor(portfolioResult.overall_return_he)}`}>
+                <span className={`text-lg font-bold ${returnColorFor(portfolioResult.overall_return_he, portfolioResult.overall_return_pct)}`}>
                   {portfolioResult.overall_return_he}
                 </span>
               </div>
@@ -334,7 +327,7 @@ export function WeeklySummaryPanel() {
                         <span className="text-sm font-semibold text-slate-900" dir="ltr">
                           {h.ticker} <span className="font-normal text-slate-500">· {h.company_name_he}</span>
                         </span>
-                        <span className={`text-sm font-bold ${sentimentColor(h.sentiment)}`} dir="ltr">
+                        <span className={`text-sm font-bold ${returnColorFor(h.weekly_return_he, h.weekly_return_pct)}`} dir="ltr">
                           {h.weekly_return_he}
                         </span>
                       </div>
@@ -486,7 +479,7 @@ export function WeeklySummaryPanel() {
                 {result.index_returns.map((idx, i) => (
                   <div key={i} className="rounded-lg border border-surface-border bg-surface-card p-2.5">
                     <p className="text-xs text-slate-500">{idx.name_he}</p>
-                    <p className={`mt-0.5 text-sm font-bold ${returnColor(idx.return_pct_he)}`}>
+                    <p className={`mt-0.5 text-sm font-bold ${returnColorFor(idx.return_pct_he)}`}>
                       {idx.return_pct_he}
                     </p>
                   </div>
